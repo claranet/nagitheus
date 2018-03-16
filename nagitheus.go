@@ -1,0 +1,181 @@
+// HOW TO:
+// go build nagitheus.go
+// ./nagitheus -H "https://prometheus.aux.spryker.userwerk.gcp.cloud.de.clara.net" -q "((kubelet_volume_stats_used_bytes)/kubelet_volume_stats_capacity_bytes)*100>2" -w 2.7  -c 2.3 -u claradm -p PASSWORD -m le
+
+package main
+
+import (
+    "flag"
+    "fmt"
+    "net/http"
+    "io/ioutil"
+    "bytes"
+    "encoding/json"
+    "os"
+    "strconv"
+)
+
+var exit_status int
+const (
+	OK  = 0
+	WARNING = 1
+	CRITICAL = 2
+	UNKNOWN = 3
+)
+
+var NagiosMessage string
+var NagiosStatus int
+
+// this structure is what promethes gives back when queried.
+// The Metric struct is not fixed, can vary according to what labels are returned
+type PrometheusStruct struct {
+	Status string `json:"status"`
+	Data   struct {
+		ResultType string `json:"resultType"`
+		Result     []struct {
+			Metric struct {
+				Endpoint              string `json:"endpoint"`
+				ExportedNamespace     string `json:"exported_namespace"`
+				Instance              string `json:"instance"`
+				Job                   string `json:"job"`
+				Namespace             string `json:"namespace"`
+				Persistentvolumeclaim string `json:"persistentvolumeclaim"`
+				Service               string `json:"service"`
+				Pod                   string `json:"pod"`
+				Deployment            string `json:"deployment"`
+			} `json:"metric"`
+			Value []interface{} `json:"value"`
+		} `json:"result"`
+	} `json:"data"`
+}
+
+func main() {
+    host := flag.String("H", "", "Host to query (Required, i.e. https://example.com)")
+    query := flag.String("q", "", "Prometheus query (Required)")
+    warning := flag.String("w", "", "Warning treshold (Required)")
+    critical := flag.String("c", "", "Critical treshold (Required)")
+    username := flag.String("u", "", "Username (Optional)")
+    password := flag.String("p", "", "Password (Optional)")
+    method := flag.String("m", "ge", "Comparison method (Optional, default: ge)")
+    flag.Parse()
+
+    //check flags
+    flag.VisitAll(check_set)
+    // query prometheus
+    response := execute_query(*host,*query,*username,*password)
+    // print response (DEBUGGING)
+    print_response(response)
+    // anaylze response
+    analyze_response(response, *warning, *critical, *method)
+}
+
+func check_set (argument *flag.Flag) {
+    if (argument.Value.String() == "" && argument.Name != "u" && argument.Name != "p") {
+        NagiosMessage = "Please set value for : "+ argument.Name
+        flag.PrintDefaults()
+        exit_func(UNKNOWN, NagiosMessage)
+     }
+}
+
+func execute_query(host string, query string, username string, password string) []byte {
+    url := host+"/api/v1/query?query="+"("+query+")"
+
+    client := &http.Client{ }
+    req, err := http.NewRequest("GET", url, nil)
+    req.SetBasicAuth(username,password)
+    resp, err := client.Do(req)
+    if err != nil {
+        exit_func(UNKNOWN, err.Error())
+    }
+    defer resp.Body.Close()
+    // check if status is 200
+    if (resp.StatusCode != 200) {
+        NagiosMessage = resp.Status
+        exit_func(UNKNOWN, resp.Status)
+    }
+
+    body, err := ioutil.ReadAll(resp.Body)
+    return (body)
+}
+
+// this is only for debugging
+func print_response(response []byte) {
+    var prometheus_response bytes.Buffer
+    err := json.Indent(&prometheus_response, response, "", "  ")
+    if err != nil {
+        fmt.Printf("JSON parse error: ", string(response))
+    }
+    fmt.Println("Prometheus response:", string(prometheus_response.Bytes()))
+}
+
+func analyze_response(response []byte, warning string, critical string, method string) {
+    // convert because prometheus response can be float
+    w,err := strconv.ParseFloat(warning,64)
+    c,err := strconv.ParseFloat(critical,64)
+
+    // convert []byte to json to access it more easily
+    json_resp := PrometheusStruct{}
+    err = json.Unmarshal(response,&json_resp)
+    if err != nil {
+        exit_func(UNKNOWN, "ERROR")
+    }
+    result := json_resp.Data.Result
+    if (len(result) == 0 ) {
+        exit_func(OK,"The check did not return any result") // for example when check is count or sum....
+    }
+
+    for _, result := range json_resp.Data.Result {
+        int_res, _ := strconv.ParseFloat(result.Value[1].(string),64)
+        metrics, _ := json.Marshal(result.Metric)
+        value := result.Value[1].(string)
+        switch  method {
+	    case "ge":
+            if (set_status_message(int_res, c, "CRITICAL", metrics, value, greaterequal)) {break}
+            set_status_message(int_res, w, "WARNING", metrics, value, greaterequal)
+	    case "le":
+            if (set_status_message(int_res, c, "CRITICAL", metrics, value, lowerequal)) {break}
+            set_status_message(int_res, w, "WARNING", metrics, value, lowerequal)
+	    case "lt":
+            if (set_status_message(int_res, c, "CRITICAL", metrics, value, lowerthan)) {break}
+            set_status_message(int_res, w, "WARNING", metrics, value, lowerthan)
+	    case "gt":
+            if (set_status_message(int_res, c, "CRITICAL", metrics, value, greaterthan)) {break}
+            set_status_message(int_res, w, "WARNING", metrics, value, greaterthan)
+	    }
+
+    }
+    exit_func(NagiosStatus, NagiosMessage)
+}
+
+func exit_func (status int, message string) {
+    fmt.Println(message)
+    os.Exit(status)
+}
+
+func set_status_message (int_res float64, compare float64, mess string, metrics []byte, value string, f fn) bool{
+    if (f(int_res, compare)) {
+        NagiosMessage = NagiosMessage+mess+string(metrics)+" has value "+value+"\n"
+        if ((NagiosStatus == OK || NagiosStatus == WARNING) && mess == "CRITICAL") {
+           NagiosStatus = CRITICAL
+        }
+        if (NagiosStatus == OK && mess == "WARNING") {
+           NagiosStatus = WARNING
+        }
+        return true
+    }
+    return false
+}
+
+type fn func(x float64, y float64) bool
+func greaterthan (x float64, y float64) bool {
+    return x > y
+}
+func lowerthan (x float64, y float64) bool {
+    return x < y
+}
+func greaterequal (x float64, y float64) bool {
+    return x >= y
+}
+func lowerequal (x float64, y float64) bool {
+    return x <= y
+}
