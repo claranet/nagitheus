@@ -1,6 +1,6 @@
 // HOW TO:
 // go build nagitheus.go
-// ./nagitheus -H "https://prometheus.aux.spryker.userwerk.gcp.cloud.de.clara.net" -q "((kubelet_volume_stats_used_bytes)/kubelet_volume_stats_capacity_bytes)*100>2" -w 2.7  -c 2.3 -u claradm -p PASSWORD -m le
+// ./nagitheus -H "https://prometheus.aux.spryker.userwerk.gcp.cloud.de.clara.net" -q "((kubelet_volume_stats_used_bytes)/kubelet_volume_stats_capacity_bytes)*100>2" -w 2.7  -c 2.3 -u claradm -p PASSWORD -m le - d yes
 
 package main
 
@@ -13,6 +13,7 @@ import (
     "encoding/json"
     "os"
     "strconv"
+    "time"
 )
 
 var exit_status int
@@ -28,6 +29,7 @@ var NagiosStatus int
 
 // this structure is what promethes gives back when queried.
 // The Metric struct is not fixed, can vary according to what labels are returned
+// here there are some lables that are often present
 type PrometheusStruct struct {
 	Status string `json:"status"`
 	Data   struct {
@@ -50,13 +52,15 @@ type PrometheusStruct struct {
 }
 
 func main() {
-    host := flag.String("H", "", "Host to query (Required, i.e. https://example.com)")
+    host := flag.String("H", "", "Host to query (Required, i.e. https://example.prometheus.com)")
     query := flag.String("q", "", "Prometheus query (Required)")
     warning := flag.String("w", "", "Warning treshold (Required)")
     critical := flag.String("c", "", "Critical treshold (Required)")
     username := flag.String("u", "", "Username (Optional)")
     password := flag.String("p", "", "Password (Optional)")
-    method := flag.String("m", "ge", "Comparison method (Optional, default: ge)")
+    method := flag.String("m", "ge", "Comparison method (Optional)")
+    debug := flag.String("d", "no", "Print prometheus result to output (Optional)")
+    flag.Usage = Usage
     flag.Parse()
 
     //check flags
@@ -64,15 +68,15 @@ func main() {
     // query prometheus
     response := execute_query(*host,*query,*username,*password)
     // print response (DEBUGGING)
-    print_response(response)
+    if (*debug == "yes") {print_response(response)}
     // anaylze response
     analyze_response(response, *warning, *critical, *method)
 }
 
 func check_set (argument *flag.Flag) {
-    if (argument.Value.String() == "" && argument.Name != "u" && argument.Name != "p") {
+    if (argument.Value.String() == "" && argument.Name != "u" && argument.Name != "p" && argument.Name != "d") {
         NagiosMessage = "Please set value for : "+ argument.Name
-        flag.PrintDefaults()
+        Usage()
         exit_func(UNKNOWN, NagiosMessage)
      }
 }
@@ -80,7 +84,9 @@ func check_set (argument *flag.Flag) {
 func execute_query(host string, query string, username string, password string) []byte {
     url := host+"/api/v1/query?query="+"("+query+")"
 
-    client := &http.Client{ }
+    client := &http.Client{
+        Timeout: time.Second * 10,
+    }
     req, err := http.NewRequest("GET", url, nil)
     req.SetBasicAuth(username,password)
     resp, err := client.Do(req)
@@ -88,7 +94,6 @@ func execute_query(host string, query string, username string, password string) 
         exit_func(UNKNOWN, err.Error())
     }
     defer resp.Body.Close()
-    // check if status is 200
     if (resp.StatusCode != 200) {
         NagiosMessage = resp.Status
         exit_func(UNKNOWN, resp.Status)
@@ -117,7 +122,7 @@ func analyze_response(response []byte, warning string, critical string, method s
     json_resp := PrometheusStruct{}
     err = json.Unmarshal(response,&json_resp)
     if err != nil {
-        exit_func(UNKNOWN, "ERROR")
+        exit_func(UNKNOWN, err.Error())
     }
     result := json_resp.Data.Result
     if (len(result) == 0 ) {
@@ -125,22 +130,22 @@ func analyze_response(response []byte, warning string, critical string, method s
     }
 
     for _, result := range json_resp.Data.Result {
-        int_res, _ := strconv.ParseFloat(result.Value[1].(string),64)
-        metrics, _ := json.Marshal(result.Metric)
         value := result.Value[1].(string)
+        float_value, _ := strconv.ParseFloat(result.Value[1].(string),64)
+        metrics, _ := json.Marshal(result.Metric)
         switch  method {
 	    case "ge":
-            if (set_status_message(int_res, c, "CRITICAL", metrics, value, greaterequal)) {break}
-            set_status_message(int_res, w, "WARNING", metrics, value, greaterequal)
+            if (set_status_message(float_value, c, "CRITICAL", metrics, value, greaterequal)) {break}
+            set_status_message(float_value, w, "WARNING", metrics, value, greaterequal)
 	    case "le":
-            if (set_status_message(int_res, c, "CRITICAL", metrics, value, lowerequal)) {break}
-            set_status_message(int_res, w, "WARNING", metrics, value, lowerequal)
+            if (set_status_message(float_value, c, "CRITICAL", metrics, value, lowerequal)) {break}
+            set_status_message(float_value, w, "WARNING", metrics, value, lowerequal)
 	    case "lt":
-            if (set_status_message(int_res, c, "CRITICAL", metrics, value, lowerthan)) {break}
-            set_status_message(int_res, w, "WARNING", metrics, value, lowerthan)
+            if (set_status_message(float_value, c, "CRITICAL", metrics, value, lowerthan)) {break}
+            set_status_message(float_value, w, "WARNING", metrics, value, lowerthan)
 	    case "gt":
-            if (set_status_message(int_res, c, "CRITICAL", metrics, value, greaterthan)) {break}
-            set_status_message(int_res, w, "WARNING", metrics, value, greaterthan)
+            if (set_status_message(float_value, c, "CRITICAL", metrics, value, greaterthan)) {break}
+            set_status_message(float_value, w, "WARNING", metrics, value, greaterthan)
 	    }
 
     }
@@ -152,8 +157,8 @@ func exit_func (status int, message string) {
     os.Exit(status)
 }
 
-func set_status_message (int_res float64, compare float64, mess string, metrics []byte, value string, f fn) bool{
-    if (f(int_res, compare)) {
+func set_status_message (float_value float64, compare float64, mess string, metrics []byte, value string, f fn) bool{
+    if (f(float_value, compare)) {
         NagiosMessage = NagiosMessage+mess+string(metrics)+" has value "+value+"\n"
         if ((NagiosStatus == OK || NagiosStatus == WARNING) && mess == "CRITICAL") {
            NagiosStatus = CRITICAL
@@ -178,4 +183,12 @@ func greaterequal (x float64, y float64) bool {
 }
 func lowerequal (x float64, y float64) bool {
     return x <= y
+}
+
+
+func Usage() {
+     fmt.Printf("How to: \n ")
+     fmt.Printf("$ go build nagitheus.go \n ")
+     fmt.Printf("$ ./nagitheus -H \"https://prometheus.aux.spryker.userwerk.gcp.cloud.de.clara.net\" -q \"((kubelet_volume_stats_used_bytes)/kubelet_volume_stats_capacity_bytes)*100>2\" -w 2.7  -c 2.3 -u claradm -p PASSWORD -m le -d yes\n")
+     flag.PrintDefaults()
 }
