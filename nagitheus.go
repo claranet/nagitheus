@@ -8,6 +8,7 @@ import (
     "flag"
     "fmt"
     "net/http"
+    "crypto/tls"
     "io/ioutil"
     "bytes"
     "encoding/json"
@@ -83,9 +84,14 @@ func check_set (argument *flag.Flag) {
 
 func execute_query(host string, query string, username string, password string) []byte {
     url := host+"/api/v1/query?query="+"("+query+")"
+    // because of Monitoring Master
+    tr := &http.Transport{
+	    TLSClientConfig: &tls.Config{InsecureSkipVerify : true},
+    }
 
     client := &http.Client{
         Timeout: time.Second * 10,
+        Transport: tr,
     }
     req, err := http.NewRequest("GET", url, nil)
     req.SetBasicAuth(username,password)
