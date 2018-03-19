@@ -77,7 +77,7 @@ func main() {
 func check_set (argument *flag.Flag) {
     if (argument.Value.String() == "" && argument.Name != "u" && argument.Name != "p" && argument.Name != "d") {
         NagiosMessage = "Please set value for : "+ argument.Name
-        Usage()
+//        Usage()
         exit_func(UNKNOWN, NagiosMessage)
      }
 }
@@ -161,7 +161,7 @@ func analyze_response(response []byte, warning string, critical string, method s
 }
 
 func exit_func (status int, message string) {
-    fmt.Println(message)
+    fmt.Printf("%s \n", message)
     os.Exit(status)
 }
 
