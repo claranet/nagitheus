@@ -94,7 +94,9 @@ func execute_query(host string, query string, username string, password string) 
         Transport: tr,
     }
     req, err := http.NewRequest("GET", url, nil)
-    req.SetBasicAuth(username,password)
+    if (username != "" && password != "") {
+        req.SetBasicAuth(username,password)
+    }
     resp, err := client.Do(req)
     if err != nil {
         exit_func(UNKNOWN, err.Error())
