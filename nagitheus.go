@@ -84,7 +84,7 @@ func check_set (argument *flag.Flag) {
 
 func execute_query(host string, query string, username string, password string) []byte {
     url := host+"/api/v1/query?query="+"("+query+")"
-    // because of Monitoring Master
+    // because of Monitoring Master we skip verify
     tr := &http.Transport{
 	    TLSClientConfig: &tls.Config{InsecureSkipVerify : true},
     }
@@ -99,15 +99,20 @@ func execute_query(host string, query string, username string, password string) 
     }
     resp, err := client.Do(req)
     if err != nil {
+        resp.Body.Close()
         exit_func(UNKNOWN, err.Error())
     }
-    defer resp.Body.Close()
     if (resp.StatusCode != 200) {
         NagiosMessage = resp.Status
         exit_func(UNKNOWN, resp.Status)
     }
 
-    body, err := ioutil.ReadAll(resp.Body)
+    body, err1 := ioutil.ReadAll(resp.Body)
+    if err1 != nil {
+        resp.Body.Close()
+        exit_func(UNKNOWN, err1.Error())
+    }
+    resp.Body.Close()
     return (body)
 }
 
