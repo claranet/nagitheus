@@ -100,3 +100,10 @@ WARNING is 2.2607424766047886 CRITICAL is 5.625835543270624
 ## Basic auth
 `-u username -p password` when both are set the request will be performed with basic auth
 
+## Improvements over https://github.com/prometheus/nagios_plugins
+
+1. It actually works :)
+2. No need to specify if vector or scalar
+3. It doesn't stop to first result but it iterates over all vector
+4. Ability to print desired label
+5. Go binary: no need of specific software on the nagios monitoring
