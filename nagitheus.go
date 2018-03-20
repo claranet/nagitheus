@@ -190,6 +190,6 @@ func lowerequal (x float64, y float64) bool {
 func Usage() {
      fmt.Printf("How to: \n ")
      fmt.Printf("$ go build nagitheus.go \n ")
-     fmt.Printf("$ ./nagitheus -H \"https://prometheus.aux.spryker.userwerk.gcp.cloud.de.clara.net\" -q \"((kubelet_volume_stats_used_bytes)/kubelet_volume_stats_capacity_bytes)*100>2\" -w 2.7  -c 2.3 -u claradm -p PASSWORD -m le -d yes\n")
+     fmt.Printf("$ ./nagitheus -H \"https://prometheus.example.com\" -q \"query\" -w 2  -c 3 -u User -p PASSWORD \n")
      flag.PrintDefaults()
 }
