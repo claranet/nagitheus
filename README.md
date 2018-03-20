@@ -4,29 +4,96 @@
 
 build:
 ```
-$ go build nagitheus.go`
+$ go build nagitheus.go
+or from mac to linux
+env GOOS=linux GOARCH=amd64 go build nagitheus.go
 ````
 run:
 ```
- $ ./nagitheus -H "https://prometheus.aux.spryker.userwerk.gcp.cloud.de.clara.net" -q "((kubelet_volume_stats_used_bytes)/kubelet_volume_stats_capacity_bytes)*100>2" -w 2.7  -c 2.3 -u claradm -p PASSWORD -m le -d yes
+ $ ./nagitheus -H "https://prometheus.example.com" -q "PrometheusQueryNoSpaces" -w 2  -c 2 -u username -p PASSWORD -m le  -l label
+```
+Example:
+```
+go run nagitheus.go -H 'https://prometheus.aux.spryker.userwerk.gcp.cloud.de.clara.net' -q "(kubelet_volume_stats_used_bytes/kubelet_volume_stats_capacity_bytes*100)>2" -w 2  -c 5  -m ge -u UN -p PW -l persistentvolumeclaim
+WARNING prometheus-kube-prometheus-db-prometheus-kube-prometheus-0 is 2.2607424766047886 CRITICAL prometheus-kube-prometheus-db-prometheus-kube-prometheus-0 is 5.625835543270624
+exit status 2
+```
+HELP:
+```
   -H string
     	Host to query (Required, i.e. https://example.prometheus.com)
+  -q string
+    	Prometheus query (Required)
+  -w string
+    	Warning treshold (Required)
   -c string
     	Critical treshold (Required)
   -d string
-    	Print prometheus result to output (Optional) (default "no")
+    	Print whole prometheus result to output (Optional) (default "no")
   -l string
     	Label to print (Optional) (default "none")
   -m string
     	Comparison method (Optional) (default "ge")
-  -p string
-    	Password (Optional)
-  -q string
-    	Prometheus query (Required)
   -u string
     	Username (Optional)
-  -w string
-    	Warning treshold (Required)`
+  -p string
+    	Password (Optional)
+
+```
+This software will perform a request on the prometheus server. Required flags are the Host, Query, Warning and Critical.
+
+`-d yes` will print to outputn the whole response from Prometheus (best used from command line and not from Nagios):
+```
+Prometheus response: {
+  "status": "success",
+  "data": {
+    "resultType": "vector",
+    "result": [
+      {
+        "metric": {
+          "endpoint": "http-metrics",
+          "exported_namespace": "aux",
+          "instance": "10.42.0.2:10255",
+          "job": "kubelet",
+          "namespace": "kube-system",
+          "persistentvolumeclaim": "prometheus-kube-prometheus-db-prometheus-kube-prometheus-0",
+          "service": "kubelet"
+        },
+        "value": [
+          1521551995.114,
+          "2.2607424766047886"
+        ]
+      },
+      {
+        "metric": {
+          "endpoint": "http-metrics",
+          "exported_namespace": "aux",
+          "instance": "10.42.0.4:10255",
+          "job": "kubelet",
+          "namespace": "kube-system",
+          "persistentvolumeclaim": "prometheus-kube-prometheus-db-prometheus-kube-prometheus-0",
+          "service": "kubelet"
+        },
+        "value": [
+          1521551995.114,
+          "5.625835543270624"
+        ]
+      }
+    ]
+  }
+}
 ```
 
+`-l labelname` takes a label that you want to print toghether with Status and value:
+```
+WARNING prometheus-kube-prometheus-db-prometheus-kube-prometheus-0 is 2.2607424766047886 CRITICAL prometheus-kube-prometheus-db-prometheus-kube-prometheus-0 is 5.625835543270624
+```
+Without the label the result would be
+```
+WARNING is 2.2607424766047886 CRITICAL is 5.625835543270624
+```
+
+`-m ge OR gt OR le OR lt` tells the check how to compare the result with the critical and warning flags 
+
+`-u username -p password` when both are set the request will be performed with basic auth
 
