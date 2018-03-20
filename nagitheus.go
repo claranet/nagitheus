@@ -29,8 +29,7 @@ var NagiosMessage string
 var NagiosStatus int
 
 // this structure is what promethes gives back when queried.
-// The Metric struct is not fixed, can vary according to what labels are returned
-// here there are some lables that are often present
+// The Metric map is not fixed, can vary according to what labels are returned
 type PrometheusStruct struct {
 	Status string `json:"status"`
 	Data   struct {
@@ -43,15 +42,15 @@ type PrometheusStruct struct {
 }
 
 func main() {
-    host := flag.String("H", "", "Host to query (Required, i.e. https://example.prometheus.com)")
-    query := flag.String("q", "", "Prometheus query (Required)")
-    warning := flag.String("w", "", "Warning treshold (Required)")
+    host     := flag.String("H", "", "Host to query (Required, i.e. https://example.prometheus.com)")
+    query    := flag.String("q", "", "Prometheus query (Required)")
+    warning  := flag.String("w", "", "Warning treshold (Required)")
     critical := flag.String("c", "", "Critical treshold (Required)")
     username := flag.String("u", "", "Username (Optional)")
     password := flag.String("p", "", "Password (Optional)")
-    label := flag.String("l", "all", "Label to print (Optional)")
-    method := flag.String("m", "ge", "Comparison method (Optional)")
-    debug := flag.String("d", "no", "Print prometheus result to output (Optional)")
+    label    := flag.String("l", "none", "Label to print (Optional)")
+    method   := flag.String("m", "ge", "Comparison method (Optional)")
+    debug    := flag.String("d", "no", "Print prometheus result to output (Optional)")
     flag.Usage = Usage
     flag.Parse()
 
@@ -66,15 +65,16 @@ func main() {
 }
 
 func check_set (argument *flag.Flag) {
-    if (argument.Value.String() == "" && argument.Name != "u" && argument.Name != "p" && argument.Name != "d") {
+    if (argument.Value.String() == "" && argument.Name != "u" && argument.Name != "p") {
         NagiosMessage = "Please set value for : "+ argument.Name
-//        Usage()
+        Usage()
         exit_func(UNKNOWN, NagiosMessage)
      }
 }
 
 func execute_query(host string, query string, username string, password string) []byte {
     url := host+"/api/v1/query?query="+"("+query+")"
+
     // because of Monitoring Master we skip verify
     tr := &http.Transport{
 	    TLSClientConfig: &tls.Config{InsecureSkipVerify : true},
@@ -84,6 +84,7 @@ func execute_query(host string, query string, username string, password string) 
         Timeout: time.Second * 10,
         Transport: tr,
     }
+
     req, err := http.NewRequest("GET", url, nil)
     if (username != "" && password != "") {
         req.SetBasicAuth(username,password)
@@ -94,20 +95,20 @@ func execute_query(host string, query string, username string, password string) 
         exit_func(UNKNOWN, err.Error())
     }
     if (resp.StatusCode != 200) {
-        NagiosMessage = resp.Status
+        resp.Body.Close()
         exit_func(UNKNOWN, resp.Status)
     }
 
-    body, err1 := ioutil.ReadAll(resp.Body)
-    if err1 != nil {
+    body, err := ioutil.ReadAll(resp.Body)
+    if err != nil {
         resp.Body.Close()
-        exit_func(UNKNOWN, err1.Error())
+        exit_func(UNKNOWN, err.Error())
     }
     resp.Body.Close()
     return (body)
 }
 
-// this is only for debugging
+// this is only for debugging via command line to print all response
 func print_response(response []byte) {
     var prometheus_response bytes.Buffer
     err := json.Indent(&prometheus_response, response, "", "  ")
@@ -130,28 +131,26 @@ func analyze_response(response []byte, warning string, critical string, method s
     }
     result := json_resp.Data.Result
     if (len(result) == 0 ) {
-        exit_func(OK,"The check did not return any result") // for example when check is count or sum....
+        exit_func(OK,"The query did not return any result") // for example when check is count or sum....
     }
 
     for _, result := range json_resp.Data.Result {
         value := result.Value[1].(string)
         float_value, _ := strconv.ParseFloat(result.Value[1].(string),64)
         metrics := result.Metric
-        //metrics, _ := json.Marshal(result.Metric)
-        fmt.Println("Label is:", metrics[label])
         switch  method {
 	    case "ge":
-            if (set_status_message(float_value, c, "CRITICAL", metrics, value, greaterequal)) {break}
-            set_status_message(float_value, w, "WARNING", metrics, value, greaterequal)
+            if (set_status_message(float_value, c, "CRITICAL", metrics, value, greaterequal, label)) {break}
+            set_status_message(float_value, w, "WARNING", metrics, value, greaterequal, label)
 	    case "le":
-            if (set_status_message(float_value, c, "CRITICAL", metrics, value, lowerequal)) {break}
-            set_status_message(float_value, w, "WARNING", metrics, value, lowerequal)
+            if (set_status_message(float_value, c, "CRITICAL", metrics, value, lowerequal, label)) {break}
+            set_status_message(float_value, w, "WARNING", metrics, value, lowerequal, label)
 	    case "lt":
-            if (set_status_message(float_value, c, "CRITICAL", metrics, value, lowerthan)) {break}
-            set_status_message(float_value, w, "WARNING", metrics, value, lowerthan)
+            if (set_status_message(float_value, c, "CRITICAL", metrics, value, lowerthan, label)) {break}
+            set_status_message(float_value, w, "WARNING", metrics, value, lowerthan, label)
 	    case "gt":
-            if (set_status_message(float_value, c, "CRITICAL", metrics, value, greaterthan)) {break}
-            set_status_message(float_value, w, "WARNING", metrics, value, greaterthan)
+            if (set_status_message(float_value, c, "CRITICAL", metrics, value, greaterthan, label)) {break}
+            set_status_message(float_value, w, "WARNING", metrics, value, greaterthan, label)
 	    }
 
     }
@@ -163,9 +162,9 @@ func exit_func (status int, message string) {
     os.Exit(status)
 }
 
-func set_status_message (float_value float64, compare float64, mess string, metrics map[string]string, value string, f fn) bool{
+func set_status_message (float_value float64, compare float64, mess string, metrics map[string]string, value string, f fn, label string) bool{
     if (f(float_value, compare)) {
-        NagiosMessage = NagiosMessage+mess+" has value "+value+"\n"
+        NagiosMessage = NagiosMessage+mess+" "+metrics[label]+" is "+value+" "
         if ((NagiosStatus == OK || NagiosStatus == WARNING) && mess == "CRITICAL") {
            NagiosStatus = CRITICAL
         }
