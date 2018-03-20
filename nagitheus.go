@@ -36,17 +36,7 @@ type PrometheusStruct struct {
 	Data   struct {
 		ResultType string `json:"resultType"`
 		Result     []struct {
-			Metric struct {
-				Endpoint              string `json:"endpoint"`
-				ExportedNamespace     string `json:"exported_namespace"`
-				Instance              string `json:"instance"`
-				Job                   string `json:"job"`
-				Namespace             string `json:"namespace"`
-				Persistentvolumeclaim string `json:"persistentvolumeclaim"`
-				Service               string `json:"service"`
-				Pod                   string `json:"pod"`
-				Deployment            string `json:"deployment"`
-			} `json:"metric"`
+			Metric map[string]string `json:"metric"`
 			Value []interface{} `json:"value"`
 		} `json:"result"`
 	} `json:"data"`
@@ -59,6 +49,7 @@ func main() {
     critical := flag.String("c", "", "Critical treshold (Required)")
     username := flag.String("u", "", "Username (Optional)")
     password := flag.String("p", "", "Password (Optional)")
+    label := flag.String("l", "all", "Label to print (Optional)")
     method := flag.String("m", "ge", "Comparison method (Optional)")
     debug := flag.String("d", "no", "Print prometheus result to output (Optional)")
     flag.Usage = Usage
@@ -71,7 +62,7 @@ func main() {
     // print response (DEBUGGING)
     if (*debug == "yes") {print_response(response)}
     // anaylze response
-    analyze_response(response, *warning, *critical, *method)
+    analyze_response(response, *warning, *critical, *method, *label)
 }
 
 func check_set (argument *flag.Flag) {
@@ -126,7 +117,7 @@ func print_response(response []byte) {
     fmt.Println("Prometheus response:", string(prometheus_response.Bytes()))
 }
 
-func analyze_response(response []byte, warning string, critical string, method string) {
+func analyze_response(response []byte, warning string, critical string, method string, label string) {
     // convert because prometheus response can be float
     w,err := strconv.ParseFloat(warning,64)
     c,err := strconv.ParseFloat(critical,64)
@@ -145,7 +136,9 @@ func analyze_response(response []byte, warning string, critical string, method s
     for _, result := range json_resp.Data.Result {
         value := result.Value[1].(string)
         float_value, _ := strconv.ParseFloat(result.Value[1].(string),64)
-        metrics, _ := json.Marshal(result.Metric)
+        metrics := result.Metric
+        //metrics, _ := json.Marshal(result.Metric)
+        fmt.Println("Label is:", metrics[label])
         switch  method {
 	    case "ge":
             if (set_status_message(float_value, c, "CRITICAL", metrics, value, greaterequal)) {break}
@@ -170,9 +163,9 @@ func exit_func (status int, message string) {
     os.Exit(status)
 }
 
-func set_status_message (float_value float64, compare float64, mess string, metrics []byte, value string, f fn) bool{
+func set_status_message (float_value float64, compare float64, mess string, metrics map[string]string, value string, f fn) bool{
     if (f(float_value, compare)) {
-        NagiosMessage = NagiosMessage+mess+string(metrics)+" has value "+value+"\n"
+        NagiosMessage = NagiosMessage+mess+" has value "+value+"\n"
         if ((NagiosStatus == OK || NagiosStatus == WARNING) && mess == "CRITICAL") {
            NagiosStatus = CRITICAL
         }
