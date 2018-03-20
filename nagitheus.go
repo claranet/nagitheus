@@ -1,7 +1,3 @@
-// HOW TO:
-// go build nagitheus.go
-// ./nagitheus -H "https://prometheus.aux.spryker.userwerk.gcp.cloud.de.clara.net" -q "((kubelet_volume_stats_used_bytes)/kubelet_volume_stats_capacity_bytes)*100>2" -w 2.7  -c 2.3 -u claradm -p PASSWORD -m le - d yes
-
 package main
 
 import (
