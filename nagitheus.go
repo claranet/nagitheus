@@ -23,7 +23,10 @@ const (
 	UNKNOWN = 3
 )
 
-var NagiosMessage string
+var NagiosMessage struct {
+    critical string
+    warning string
+}
 var NagiosStatus int
 
 type Comparison struct {
@@ -82,9 +85,9 @@ func main() {
 
 func check_set (argument *flag.Flag) {
     if (argument.Value.String() == "" && argument.Name != "u" && argument.Name != "p") {
-        NagiosMessage = "Please set value for : "+ argument.Name
+        Message := "Please set value for : "+ argument.Name
         Usage()
-        exit_func(UNKNOWN, NagiosMessage)
+        exit_func(UNKNOWN, Message)
      }
 }
 
@@ -157,7 +160,7 @@ func analyze_response(response []byte, warning string, critical string, method s
             set_status_message(w, "WARNING", metrics, value, method, label)
         }
     }
-    exit_func(NagiosStatus, NagiosMessage)
+    exit_func(NagiosStatus, NagiosMessage.critical+NagiosMessage.warning)
 }
 
 func exit_func (status int, message string) {
@@ -171,12 +174,16 @@ func set_status_message (compare float64, mess string, metrics map[string]string
     c := Comparison{float_value, compare}                                    // structure with result value and comparison (w or c)
     fn := reflect.ValueOf(&c).MethodByName(method).Call([]reflect.Value{})   // call the function with name method
     if (fn[0].Bool()) {                                                      // get the result of the function called above
-        NagiosMessage = NagiosMessage+mess+" "+metrics[label]+" is "+value+" "
-        if ((NagiosStatus == OK || NagiosStatus == WARNING) && mess == "CRITICAL") {
-           NagiosStatus = CRITICAL
-        }
-        if (NagiosStatus == OK && mess == "WARNING") {
-           NagiosStatus = WARNING
+        if (mess == "CRITICAL") {
+            NagiosMessage.critical = NagiosMessage.critical+mess+" "+metrics[label]+" is "+value+" "
+            if ((NagiosStatus == OK || NagiosStatus == WARNING)) {
+               NagiosStatus = CRITICAL
+            }
+        } else {
+            NagiosMessage.warning = NagiosMessage.warning+mess+" "+metrics[label]+" is "+value+" "
+            if (NagiosStatus == OK) {
+               NagiosStatus = WARNING
+            }
         }
         return true
     }
