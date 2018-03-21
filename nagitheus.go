@@ -11,6 +11,8 @@ import (
     "os"
     "strconv"
     "time"
+    "reflect"
+    "strings"
 )
 
 var exit_status int
@@ -23,6 +25,24 @@ const (
 
 var NagiosMessage string
 var NagiosStatus int
+
+type Comparison struct {
+        x float64
+        y float64
+}
+
+func (c *Comparison) GT () bool {
+    return c.x > c.y
+}
+func (c *Comparison) LT () bool {
+    return c.x < c.y
+}
+func (c *Comparison) GE () bool {
+    return c.x >= c.y
+}
+func (c *Comparison) LE () bool {
+    return c.x <= c.y
+}
 
 // this structure is what promethes gives back when queried.
 // The Metric map is not fixed, can vary according to what labels are returned
@@ -57,7 +77,7 @@ func main() {
     // print response (DEBUGGING)
     if (*debug == "yes") {print_response(response)}
     // anaylze response
-    analyze_response(response, *warning, *critical, *method, *label)
+    analyze_response(response, *warning, *critical, strings.ToUpper(*method), *label)
 }
 
 func check_set (argument *flag.Flag) {
@@ -116,39 +136,26 @@ func print_response(response []byte) {
 
 func analyze_response(response []byte, warning string, critical string, method string, label string) {
     // convert because prometheus response can be float
-    w,err := strconv.ParseFloat(warning,64)
-    c,err := strconv.ParseFloat(critical,64)
+    w,_ := strconv.ParseFloat(warning,64)
+    c,_ := strconv.ParseFloat(critical,64)
 
     // convert []byte to json to access it more easily
     json_resp := PrometheusStruct{}
-    err = json.Unmarshal(response,&json_resp)
+    err := json.Unmarshal(response,&json_resp)
     if err != nil {
         exit_func(UNKNOWN, err.Error())
     }
     result := json_resp.Data.Result
     if (len(result) == 0 ) {
-        exit_func(OK,"The query did not return any result") // for example when check is count or sum....
+        exit_func(OK,"OK - The query did not return any result") // for example when check is count or because query returns "no data"
     }
 
     for _, result := range json_resp.Data.Result {
         value := result.Value[1].(string)
-        float_value, _ := strconv.ParseFloat(result.Value[1].(string),64)
         metrics := result.Metric
-        switch  method {
-	    case "ge":
-            if (set_status_message(float_value, c, "CRITICAL", metrics, value, greaterequal, label)) {break}
-            set_status_message(float_value, w, "WARNING", metrics, value, greaterequal, label)
-	    case "le":
-            if (set_status_message(float_value, c, "CRITICAL", metrics, value, lowerequal, label)) {break}
-            set_status_message(float_value, w, "WARNING", metrics, value, lowerequal, label)
-	    case "lt":
-            if (set_status_message(float_value, c, "CRITICAL", metrics, value, lowerthan, label)) {break}
-            set_status_message(float_value, w, "WARNING", metrics, value, lowerthan, label)
-	    case "gt":
-            if (set_status_message(float_value, c, "CRITICAL", metrics, value, greaterthan, label)) {break}
-            set_status_message(float_value, w, "WARNING", metrics, value, greaterthan, label)
-	    }
-
+        if (!set_status_message(c, "CRITICAL", metrics, value, method, label)) {
+            set_status_message(w, "WARNING", metrics, value, method, label)
+        }
     }
     exit_func(NagiosStatus, NagiosMessage)
 }
@@ -158,8 +165,12 @@ func exit_func (status int, message string) {
     os.Exit(status)
 }
 
-func set_status_message (float_value float64, compare float64, mess string, metrics map[string]string, value string, f fn, label string) bool{
-    if (f(float_value, compare)) {
+func set_status_message (compare float64, mess string, metrics map[string]string, value string, method string, label string) bool{
+
+    float_value, _ := strconv.ParseFloat(value,64)
+    c := Comparison{float_value, compare}                                    // structure with result value and comparison (w or c)
+    fn := reflect.ValueOf(&c).MethodByName(method).Call([]reflect.Value{})   // call the function with name method
+    if (fn[0].Bool()) {                                                      // get the result of the function called above
         NagiosMessage = NagiosMessage+mess+" "+metrics[label]+" is "+value+" "
         if ((NagiosStatus == OK || NagiosStatus == WARNING) && mess == "CRITICAL") {
            NagiosStatus = CRITICAL
@@ -171,21 +182,6 @@ func set_status_message (float_value float64, compare float64, mess string, metr
     }
     return false
 }
-
-type fn func(x float64, y float64) bool
-func greaterthan (x float64, y float64) bool {
-    return x > y
-}
-func lowerthan (x float64, y float64) bool {
-    return x < y
-}
-func greaterequal (x float64, y float64) bool {
-    return x >= y
-}
-func lowerequal (x float64, y float64) bool {
-    return x <= y
-}
-
 
 func Usage() {
      fmt.Printf("How to: \n ")
