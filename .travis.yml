@@ -1,0 +1,34 @@
+services:
+- docker
+  
+go:
+- master
+
+branches:
+  only:
+  - /^v\d+\.\d+\.\d+$/
+
+jobs:
+  include:
+    
+    - name: build and deploy binaries
+      script:
+        - go get github.com/mitchellh/gox
+        - go get -d
+        - gox -os="linux darwin windows" -arch="amd64" -verbose -output="bin/{{.Dir}}_{{.OS}}_{{.Arch}}"
+      deploy:
+        provider: releases
+        skip_cleanup: true
+        api_key:
+          secure: "$GITHUBTOKEN"
+        file_glob: true
+        file: bin/*
+        on:
+          tags: true
+    - name: Build and deploy docker image
+      script:
+        - docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
+        - docker build -t claranet/nagitheus:latest .
+        - docker tag claranet/graylog-exporter:latest claranet/nagitheus:$TRAVIS_BRANCH
+        - docker push claranet/nagitheus:latest
+        - docker push claranet/nagitheus:$TRAVIS_BRANCH:latest
