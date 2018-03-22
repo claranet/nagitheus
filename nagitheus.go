@@ -160,6 +160,9 @@ func analyze_response(response []byte, warning string, critical string, method s
             set_status_message(w, "WARNING", metrics, value, method, label)
         }
     }
+    if (NagiosMessage.critical == "" && NagiosMessage.warning == ""){
+        exit_func(NagiosStatus, "OK")
+    }
     exit_func(NagiosStatus, NagiosMessage.critical+NagiosMessage.warning)
 }
 
