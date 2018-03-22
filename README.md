@@ -1,6 +1,34 @@
 # Check Prometheus from Nagios
 
-## How To
+<!-- vim-markdown-toc GFM -->
+
+* [What](#what)
+* [Why](#why)
+* [How to build](#how-to-build)
+* [How to run](#how-to-run)
+* [Usage](#usage)
+* [Debug](#debug)
+* [Label](#label)
+* [Method](#method)
+* [Basic auth](#basic-auth)
+
+<!-- vim-markdown-toc -->
+
+## What
+
+A Nagios plugin for querying Prometheus.
+
+## Why
+
+This tool has been inspired by the upstream provided shell script to be found [here](https://github.com/prometheus/nagios_plugins). But unfortunately this shell script is deficient in several ways:
+
+1. It actually works :)
+2. No need to specify if vector or scalar
+3. It doesn't stop at the first result but iterates over whole vector
+4. Ability to print desired label
+5. Go binary: no need of specific software on the nagios monitoring
+
+## How to build
 
 build:
 ```
@@ -12,13 +40,14 @@ run:
 ```
  $ ./nagitheus -H "https://prometheus.example.com" -q "PrometheusQueryNoSpaces" -w 2  -c 2 -u username -p PASSWORD -m le  -l label
 ```
-## Example
+## How to run
 ```
-go run nagitheus.go -H 'https://prometheus.aux.spryker.userwerk.gcp.cloud.de.clara.net' -q "(kubelet_volume_stats_used_bytes/kubelet_volume_stats_capacity_bytes*100)>2" -w 2  -c 5  -m ge -u UN -p PW -l persistentvolumeclaim
+$ go run nagitheus.go -H 'https://prometheus.mgt.domain.com' -q "(kubelet_volume_stats_used_bytes/kubelet_volume_stats_capacity_bytes*100)>2" -w 2  -c 5  -m ge -u UN -p PW -l persistentvolumeclaim
 WARNING prometheus-kube-prometheus-db-prometheus-kube-prometheus-0 is 2.2607424766047886 CRITICAL prometheus-kube-prometheus-db-prometheus-kube-prometheus-0 is 5.625835543270624
 exit status 2
 ```
-## HELP:
+## Usage
+
 ```
   -H string
     	Host to query (Required, i.e. https://example.prometheus.com)
@@ -43,6 +72,7 @@ exit status 2
 This software will perform a request on the prometheus server. Required flags are the Host, Query, Warning and Critical.
 
 ## Debug
+
 `-d yes` will print to outputn the whole response from Prometheus (best used from command line and not from Nagios):
 ```
 Prometheus response: {
@@ -85,6 +115,7 @@ Prometheus response: {
 }
 ```
 ## Label
+
 `-l labelname` takes a label that you want to print toghether with Status and value:
 ```
 WARNING prometheus-kube-prometheus-db-prometheus-kube-prometheus-0 is 2.2607424766047886 CRITICAL prometheus-kube-prometheus-db-prometheus-kube-prometheus-0 is 5.625835543270624
@@ -95,15 +126,9 @@ WARNING is 2.2607424766047886 CRITICAL is 5.625835543270624
 ```
 
 ## Method
+
 `-m ge OR gt OR le OR lt` tells the check how to compare the result with the critical and warning flags 
 
 ## Basic auth
 `-u username -p password` when both are set the request will be performed with basic auth
 
-## Improvements over https://github.com/prometheus/nagios_plugins
-
-1. It actually works :)
-2. No need to specify if vector or scalar
-3. It doesn't stop to first result but it iterates over all vector
-4. Ability to print desired label
-5. Go binary: no need of specific software on the nagios monitoring
