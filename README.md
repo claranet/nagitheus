@@ -3,6 +3,7 @@
 <!-- vim-markdown-toc GFM -->
 
 * [What](#what)
+* [TL;DR](#tldr)
 * [Why](#why)
 * [How to build](#how-to-build)
 * [How to run](#how-to-run)
@@ -17,6 +18,12 @@
 ## What
 
 A Nagios plugin for querying Prometheus.
+
+## TL;DR
+
+```
+$ docker run -it claranet/nagitheus:latest -h
+```
 
 ## Why
 
