@@ -106,7 +106,7 @@ func check_set(argument *flag.Flag) {
 	if argument.Value.String() == "" && argument.Name != "u" && argument.Name != "p" {
 		Message := "Please set value for : " + argument.Name
 		Usage()
-		exit_func(UNKNOWN, Message)
+		exit_func(CRITICAL, Message)
 	}
 }
 
