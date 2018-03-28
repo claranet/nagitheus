@@ -134,7 +134,7 @@ func execute_query(host string, query string, username string, password string) 
 	}
 	if resp.StatusCode != 200 {
 		resp.Body.Close()
-		exit_func(UNKNOWN, resp.Status)
+		exit_func(CRITICAL, resp.Status)
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)

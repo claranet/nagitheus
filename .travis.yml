@@ -4,10 +4,6 @@ services:
 go:
 - master
 
-branches:
-  only:
-  - /^v\d+\.\d+\.\d+$/
-
 jobs:
   include:
     
@@ -29,6 +25,6 @@ jobs:
       script:
         - docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"
         - docker build -t claranet/nagitheus:latest .
-        - docker tag claranet/graylog-exporter:latest claranet/nagitheus:$TRAVIS_BRANCH
+        - docker tag claranet/nagitheus:latest claranet/nagitheus:$TRAVIS_BRANCH
         - docker push claranet/nagitheus:latest
-        - docker push claranet/nagitheus:$TRAVIS_BRANCH:latest
+        - docker push claranet/nagitheus:$TRAVIS_BRANCH
