@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"reflect"
 	"strconv"
@@ -111,9 +112,9 @@ func check_set(argument *flag.Flag) {
 }
 
 func execute_query(host string, query string, username string, password string) []byte {
-	url := host + "/api/v1/query?query=" + "(" + query + ")"
+	query_encoded := url.QueryEscape(query)
+	url_complete := host + "/api/v1/query?query=" + "(" + query_encoded + ")"
 
-	// because of Monitoring Master we skip verify
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
@@ -123,7 +124,7 @@ func execute_query(host string, query string, username string, password string) 
 		Transport: tr,
 	}
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest("GET", url_complete, nil)
 	if username != "" && password != "" {
 		req.SetBasicAuth(username, password)
 	}

@@ -27,7 +27,8 @@ $ docker run -it claranet/nagitheus:latest -h
 
 ## Why
 
-This tool has been inspired by the upstream provided shell script to be found [here](https://github.com/prometheus/nagios_plugins). But unfortunately this shell script is deficient in several ways:
+This tool has been inspired by the upstream provided shell script to be found [here](https://github.com/prometheus/nagios_plugins). But unfortunately this shell script is deficient in several ways.
+Nagitheus instead:
 
 1. It actually works :)
 2. No need to specify if vector or scalar
@@ -45,7 +46,7 @@ env GOOS=linux GOARCH=amd64 go build nagitheus.go
 ````
 run:
 ```
- $ ./nagitheus -H "https://prometheus.example.com" -q "PrometheusQueryNoSpaces" -w 2  -c 2 -u username -p PASSWORD -m le  -l label
+ $ ./nagitheus -H "https://prometheus.example.com" -q "Prometheus Query" -w 2  -c 2 -u username -p PASSWORD -m le  -l label
 ```
 ## How to run
 ```
