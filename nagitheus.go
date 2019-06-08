@@ -32,6 +32,17 @@ import (
 	"time"
 )
 
+type arrayFlags []string
+
+func (i *arrayFlags) String() string {
+	return "my string representation"
+}
+
+func (i *arrayFlags) Set(value string) error {
+	*i = append(*i, value)
+	return nil
+}
+
 var exit_status int
 
 const (
@@ -85,7 +96,8 @@ func main() {
 	critical := flag.String("c", "", "Critical treshold (Required)")
 	username := flag.String("u", "", "Username (Optional)")
 	password := flag.String("p", "", "Password (Optional)")
-	label := flag.String("l", "none", "Label to print (Optional)")
+	var labels arrayFlags
+	flag.Var(&labels, "l", "Labels to print (Optional)")
 	method := flag.String("m", "ge", "Comparison method (Optional)")
 	debug := flag.String("d", "no", "Print prometheus result to output (Optional)")
 	flag.Usage = Usage
@@ -100,7 +112,7 @@ func main() {
 		print_response(response)
 	}
 	// anaylze response
-	analyze_response(response, *warning, *critical, strings.ToUpper(*method), *label)
+	analyze_response(response, *warning, *critical, strings.ToUpper(*method), labels)
 }
 
 func check_set(argument *flag.Flag) {
@@ -108,6 +120,15 @@ func check_set(argument *flag.Flag) {
 		Message := "Please set value for : " + argument.Name
 		Usage()
 		exit_func(UNKNOWN, Message)
+	}
+	if argument.Name == "m" {
+		method := strings.ToUpper(argument.Value.String())
+		Message := "Wrong method. Please set a valid method : GT, LT, GE, LE"
+		f := reflect.ValueOf(&Comparison{}).MethodByName(method)
+		if !f.IsValid() {
+			Usage()
+			exit_func(UNKNOWN, Message)
+		}
 	}
 }
 
@@ -130,7 +151,9 @@ func execute_query(host string, query string, username string, password string) 
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		resp.Body.Close()
+		if resp != nil {
+			resp.Body.Close()
+		}
 		exit_func(UNKNOWN, err.Error())
 	}
 	if resp.StatusCode != 200 {
@@ -157,11 +180,16 @@ func print_response(response []byte) {
 	fmt.Println("Prometheus response:", string(prometheus_response.Bytes()))
 }
 
-func analyze_response(response []byte, warning string, critical string, method string, label string) {
+func analyze_response(response []byte, warning string, critical string, method string, labels []string) {
 	// convert because prometheus response can be float
-	w, _ := strconv.ParseFloat(warning, 64)
-	c, _ := strconv.ParseFloat(critical, 64)
-
+	w, err_w := strconv.ParseFloat(warning, 64)
+	c, err_c := strconv.ParseFloat(critical, 64)
+	if err_w != nil {
+		exit_func(UNKNOWN, "Wrong warning threshold format: "+err_w.Error())
+	}
+	if err_c != nil {
+		exit_func(UNKNOWN, "Wrong critical threshold format: "+err_c.Error())
+	}
 	// convert []byte to json to access it more easily
 	json_resp := PrometheusStruct{}
 	err := json.Unmarshal(response, &json_resp)
@@ -176,8 +204,8 @@ func analyze_response(response []byte, warning string, critical string, method s
 	for _, result := range json_resp.Data.Result {
 		value := result.Value[1].(string)
 		metrics := result.Metric
-		if !set_status_message(c, "CRITICAL", metrics, value, method, label) {
-			set_status_message(w, "WARNING", metrics, value, method, label)
+		if !set_status_message(c, "CRITICAL", metrics, value, method, labels) {
+			set_status_message(w, "WARNING", metrics, value, method, labels)
 		}
 	}
 	if NagiosMessage.critical == "" && NagiosMessage.warning == "" {
@@ -191,19 +219,25 @@ func exit_func(status int, message string) {
 	os.Exit(status)
 }
 
-func set_status_message(compare float64, mess string, metrics map[string]string, value string, method string, label string) bool {
+func set_status_message(compare float64, mess string, metrics map[string]string, value string, method string, labels []string) bool {
 
+	aggregated_labels := ""
+	for _, label := range labels {
+		if label_value, ok := metrics[label]; ok {
+			aggregated_labels = aggregated_labels + label + ":" + label_value + " "
+		}
+	}
 	float_value, _ := strconv.ParseFloat(value, 64)
 	c := Comparison{float_value, compare}                                  // structure with result value and comparison (w or c)
 	fn := reflect.ValueOf(&c).MethodByName(method).Call([]reflect.Value{}) // call the function with name method
 	if fn[0].Bool() {                                                      // get the result of the function called above
 		if mess == "CRITICAL" {
-			NagiosMessage.critical = NagiosMessage.critical + mess + " " + metrics[label] + " is " + value + " "
+			NagiosMessage.critical = NagiosMessage.critical + mess + " " + aggregated_labels + " is " + value + " "
 			if NagiosStatus == OK || NagiosStatus == WARNING {
 				NagiosStatus = CRITICAL
 			}
 		} else {
-			NagiosMessage.warning = NagiosMessage.warning + mess + " " + metrics[label] + " is " + value + " "
+			NagiosMessage.warning = NagiosMessage.warning + mess + " " + aggregated_labels + " is " + value + " "
 			if NagiosStatus == OK {
 				NagiosStatus = WARNING
 			}
