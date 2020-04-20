@@ -130,7 +130,9 @@ func execute_query(host string, query string, username string, password string) 
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		resp.Body.Close()
+		if resp != nil {
+			resp.Body.Close()
+		}
 		exit_func(UNKNOWN, err.Error())
 	}
 	if resp.StatusCode != 200 {
