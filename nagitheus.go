@@ -172,7 +172,7 @@ func analyze_response(response []byte, warning string, critical string, method s
 	}
 	result := json_resp.Data.Result
 	if len(result) == 0 {
-		exit_func(OK, "OK - The query did not return any result") // for example when check is count or because query returns "no data"
+		exit_func(CRITICAL, "CRITICAL - The query did not return any result") // for example when check is count or because query returns "no data"
 	}
 
 	for _, result := range json_resp.Data.Result {
