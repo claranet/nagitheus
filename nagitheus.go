@@ -88,6 +88,7 @@ func main() {
 	label := flag.String("l", "none", "Label to print (Optional)")
 	method := flag.String("m", "ge", "Comparison method (Optional)")
 	debug := flag.String("d", "no", "Print prometheus result to output (Optional)")
+	on_missing := flag.Bool("critical-on-missing", false, "Retrun CRITICAL if query results are missing (Optional)")
 	flag.Usage = Usage
 	flag.Parse()
 
@@ -100,7 +101,7 @@ func main() {
 		print_response(response)
 	}
 	// anaylze response
-	analyze_response(response, *warning, *critical, strings.ToUpper(*method), *label)
+	analyze_response(response, *warning, *critical, strings.ToUpper(*method), *label, *on_missing)
 }
 
 func check_set(argument *flag.Flag) {
@@ -159,7 +160,7 @@ func print_response(response []byte) {
 	fmt.Println("Prometheus response:", string(prometheus_response.Bytes()))
 }
 
-func analyze_response(response []byte, warning string, critical string, method string, label string) {
+func analyze_response(response []byte, warning string, critical string, method string, label string, on_missing bool) {
 	// convert because prometheus response can be float
 	w, _ := strconv.ParseFloat(warning, 64)
 	c, _ := strconv.ParseFloat(critical, 64)
@@ -171,8 +172,11 @@ func analyze_response(response []byte, warning string, critical string, method s
 		exit_func(UNKNOWN, err.Error())
 	}
 	result := json_resp.Data.Result
-	if len(result) == 0 {
-		exit_func(CRITICAL, "CRITICAL - The query did not return any result") // for example when check is count or because query returns "no data"
+	// Missing query result: for example when check is count or because query returns "no data"
+	if len(result) == 0 && on_missing == false {
+		exit_func(OK, "OK - The query did not return any result")
+	} else if len(result) == 0 && on_missing == true {
+		exit_func(CRITICAL, "CRITICAL - The query did not return any result")
 	}
 
 	for _, result := range json_resp.Data.Result {
