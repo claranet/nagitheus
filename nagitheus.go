@@ -88,7 +88,7 @@ func main() {
 	label := flag.String("l", "none", "Label to print (Optional)")
 	method := flag.String("m", "ge", "Comparison method (Optional)")
 	debug := flag.String("d", "no", "Print prometheus result to output (Optional)")
-	on_missing := flag.Bool("critical-on-missing", false, "Retrun CRITICAL if query results are missing (Optional)")
+	on_missing := flag.Bool("critical-on-missing", false, "Return CRITICAL if query results are missing (Optional)")
 	flag.Usage = Usage
 	flag.Parse()
 
