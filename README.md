@@ -75,6 +75,8 @@ exit status 2
     	Username (Optional)
   -p string
     	Password (Optional)
+  --critical-on-missing
+      Return CRITICAL if query results are missing (Optional)
 
 ```
 This software will perform a request on the prometheus server. Required flags are the Host, Query, Warning and Critical.
