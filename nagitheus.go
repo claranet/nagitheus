@@ -88,7 +88,7 @@ func main() {
 	label := flag.String("l", "none", "Label to print (Optional)")
 	method := flag.String("m", "ge", "Comparison method (Optional)")
 	debug := flag.String("d", "no", "Print prometheus result to output (Optional)")
-	on_missing := flag.Bool("critical-on-missing", false, "Return CRITICAL if query results are missing (Optional)")
+	on_missing := flag.String("critical-on-missing", "no", "Return CRITICAL if query results are missing (Optional)")
 	flag.Usage = Usage
 	flag.Parse()
 
@@ -160,7 +160,7 @@ func print_response(response []byte) {
 	fmt.Println("Prometheus response:", string(prometheus_response.Bytes()))
 }
 
-func analyze_response(response []byte, warning string, critical string, method string, label string, on_missing bool) {
+func analyze_response(response []byte, warning string, critical string, method string, label string, on_missing string) {
 	// convert because prometheus response can be float
 	w, _ := strconv.ParseFloat(warning, 64)
 	c, _ := strconv.ParseFloat(critical, 64)
@@ -173,9 +173,9 @@ func analyze_response(response []byte, warning string, critical string, method s
 	}
 	result := json_resp.Data.Result
 	// Missing query result: for example when check is count or because query returns "no data"
-	if len(result) == 0 && on_missing == false {
+	if len(result) == 0 && on_missing == "no" {
 		exit_func(OK, "OK - The query did not return any result")
-	} else if len(result) == 0 && on_missing == true {
+	} else if len(result) == 0 && on_missing == "yes" {
 		exit_func(CRITICAL, "CRITICAL - The query did not return any result")
 	}
 
@@ -222,6 +222,6 @@ func set_status_message(compare float64, mess string, metrics map[string]string,
 func Usage() {
 	fmt.Printf("How to: \n ")
 	fmt.Printf("$ go build nagitheus.go \n ")
-	fmt.Printf("$ ./nagitheus -H \"https://prometheus.example.com\" -q \"query\" -w 2  -c 3 -u User -p PASSWORD \n")
+	fmt.Printf("$ ./nagitheus -H \"https://prometheus.example.com\" -q \"query\" -w 2  -c 3 -u User -p PASSWORD \n\n")
 	flag.PrintDefaults()
 }

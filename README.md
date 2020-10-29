@@ -58,25 +58,25 @@ exit status 2
 
 ```
   -H string
-    	Host to query (Required, i.e. https://example.prometheus.com)
+      Host to query (Required, i.e. https://example.prometheus.com)
   -q string
-    	Prometheus query (Required)
+      Prometheus query (Required)
   -w string
-    	Warning treshold (Required)
+      Warning treshold (Required)
   -c string
-    	Critical treshold (Required)
+      Critical treshold (Required)
   -d string
-    	Print whole prometheus result to output (Optional) (default "no")
+      Print whole prometheus result to output (Optional) (default "no")
   -l string
-    	Label to print (Optional) (default "none")
+      Label to print (Optional) (default "none")
   -m string
-    	Comparison method (Optional) (default "ge")
+      Comparison method (Optional) (default "ge")
   -u string
-    	Username (Optional)
+      Username (Optional)
   -p string
-    	Password (Optional)
+      Password (Optional)
   --critical-on-missing
-      Return CRITICAL if query results are missing (Optional)
+      Return CRITICAL if query results are missing (Optional) (default "no")
 
 ```
 This software will perform a request on the prometheus server. Required flags are the Host, Query, Warning and Critical.
