@@ -77,6 +77,10 @@ exit status 2
       Password (Optional)
   --critical-on-missing
       Return CRITICAL if query results are missing (Optional) (default "no")
+  --max-chars
+      Max. count of characters to print
+  --print-details
+      Prints all returned values on multiline result
   --value-mapping string
     	Mapping result metrics for output (Optional, json i.e. '{"0":"down","1":"up"}')
   --value-unit string
