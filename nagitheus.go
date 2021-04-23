@@ -213,6 +213,7 @@ func analyze_response(response []byte, warning string, critical string, method s
 			count_ok++
 		}
 	}
+
 	// if there's only one item in the result return one line
 	// else return a summary and multilines if detailed print is activated
 	if count_crit+count_warn+count_ok > 1 && detailed_print == true {
@@ -250,6 +251,7 @@ func set_status_message(compare string, mess string, metrics map[string]string, 
 	// convert because prometheus response can be float
 	float_compare, _ := strconv.ParseFloat(compare, 64)
 	float_value, _ := strconv.ParseFloat(value, 64)
+
 	// if value mapping exist, replace it for output
 	mapped_value := valueMapping[value]
 	if len(mapped_value) > 0 {
@@ -264,8 +266,8 @@ func set_status_message(compare string, mess string, metrics map[string]string, 
 	if len(value_unit) > 0 {
 		value = value + " " + value_unit
 	}
-	c := Comparison{float_value, float_compare}
 
+	c := Comparison{float_value, float_compare}                            // structure with result value and comparison (w or c)
 	fn := reflect.ValueOf(&c).MethodByName(method).Call([]reflect.Value{}) // call the function with name method
 	if fn[0].Bool() {                                                      // get the result of the function called above
 		if mess == "CRITICAL" {
