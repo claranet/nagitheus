@@ -217,7 +217,10 @@ func analyze_response(response []byte, warning string, critical string, method s
 	// if there's only one item in the result return one line
 	// else return a summary and multilines if detailed print is activated
 	if count_crit+count_warn == 0 && count_ok > 1 && detailed_print == true {
-		NagiosMessage.summary = "OK :\n------\n"
+		if label == "none" {
+			label = "item"
+		}
+		NagiosMessage.summary = "OK " + strconv.Itoa(count_ok) + " " + label + " ok :\n------\n"
 	} else if count_crit+count_warn+count_ok > 1 && detailed_print == true {
 		switch NagiosStatus {
 		case 0:
@@ -243,7 +246,7 @@ func analyze_response(response []byte, warning string, critical string, method s
 }
 
 func exit_func(status int, message string, max_chars int64) {
-	if max_chars > 0 {
+	if max_chars > 0 && int64(len(message)) > max_chars {
 		fmt.Printf("%s\n", message[:max_chars])
 	} else {
 		fmt.Printf("%s\n", message)
