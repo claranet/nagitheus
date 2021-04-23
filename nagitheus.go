@@ -216,7 +216,9 @@ func analyze_response(response []byte, warning string, critical string, method s
 
 	// if there's only one item in the result return one line
 	// else return a summary and multilines if detailed print is activated
-	if count_crit+count_warn+count_ok > 1 && detailed_print == true {
+	if count_crit+count_warn == 0 && count_ok > 1 && detailed_print == true {
+		NagiosMessage.summary = "OK :\n------\n"
+	} else if count_crit+count_warn+count_ok > 1 && detailed_print == true {
 		switch NagiosStatus {
 		case 0:
 			NagiosMessage.summary = "OK "
@@ -231,8 +233,10 @@ func analyze_response(response []byte, warning string, critical string, method s
 			label = "item"
 		}
 		NagiosMessage.summary = NagiosMessage.summary + strconv.Itoa(count_crit) + " " + label + " critical, " + strconv.Itoa(count_warn) + " " + label + " warning, " + strconv.Itoa(count_ok) + " " + label + " ok :\n------\n"
-	} else if count_crit+count_warn+count_ok > 1 && detailed_print == false {
+	} else if count_crit+count_warn > 1 && detailed_print == false {
 		exit_func(NagiosStatus, strings.ReplaceAll(NagiosMessage.critical+NagiosMessage.warning, "\n", " "), max_chars_int)
+	} else if count_crit+count_warn == 0 && count_ok > 1 && detailed_print == false {
+		exit_func(NagiosStatus, "OK", max_chars_int)
 	}
 	exit_func(NagiosStatus, strings.TrimSuffix(NagiosMessage.summary+NagiosMessage.critical+NagiosMessage.warning+NagiosMessage.ok, "\n"), max_chars_int)
 
