@@ -35,15 +35,18 @@ import (
 var exit_status int
 
 const (
-	OK       = 0
-	WARNING  = 1
-	CRITICAL = 2
-	UNKNOWN  = 3
+	OK               = 0
+	WARNING          = 1
+	CRITICAL         = 2
+	UNKNOWN          = 3
+	NagitheusVersion = "1.3.0"
 )
 
 var NagiosMessage struct {
 	critical string
 	warning  string
+	ok       string
+	summary  string
 }
 var NagiosStatus int
 
@@ -64,6 +67,8 @@ func (c *Comparison) GE() bool {
 func (c *Comparison) LE() bool {
 	return c.x <= c.y
 }
+
+var valueMapping map[string]string
 
 // this structure is what promethes gives back when queried.
 // The Metric map is not fixed, can vary according to what labels are returned
@@ -89,10 +94,18 @@ func main() {
 	method := flag.String("m", "ge", "Comparison method (Optional)")
 	debug := flag.String("d", "no", "Print prometheus result to output (Optional)")
 	on_missing := flag.String("critical-on-missing", "no", "Return CRITICAL if query results are missing (Optional)")
+	value_mapping := flag.String("value-mapping", "", "Mapping result metrics for output (Optional, json i.e. '{\"0\":\"down\",\"1\":\"up\"}')")
+	value_unit := flag.String("value-unit", "", "Unit of the value for output (Optional, i.e. '%')")
+	version := flag.Bool("v", false, "Prints nagitheus version")
 	flag.Usage = Usage
 	flag.Parse()
 
-	//check flags
+	// nagitheus version
+	if *version {
+		fmt.Println("Nagitheus version :", NagitheusVersion)
+		os.Exit(0)
+	}
+	// check flags
 	flag.VisitAll(check_set)
 	// query prometheus
 	response := execute_query(*host, *query, *username, *password)
@@ -100,12 +113,17 @@ func main() {
 	if *debug == "yes" {
 		print_response(response)
 	}
+	// load value mapping if given
+	if len(*value_mapping) > 0 {
+		json.Unmarshal([]byte(*value_mapping), &valueMapping)
+	}
+
 	// anaylze response
-	analyze_response(response, *warning, *critical, strings.ToUpper(*method), *label, *on_missing)
+	analyze_response(response, *warning, *critical, strings.ToUpper(*method), *label, *on_missing, valueMapping, *value_unit)
 }
 
 func check_set(argument *flag.Flag) {
-	if argument.Value.String() == "" && argument.Name != "u" && argument.Name != "p" {
+	if argument.Value.String() == "" && argument.Name != "u" && argument.Name != "p" && argument.Name != "value-mapping" && argument.Name != "value-unit" {
 		Message := "Please set value for : " + argument.Name
 		Usage()
 		exit_func(UNKNOWN, Message)
@@ -160,10 +178,10 @@ func print_response(response []byte) {
 	fmt.Println("Prometheus response:", string(prometheus_response.Bytes()))
 }
 
-func analyze_response(response []byte, warning string, critical string, method string, label string, on_missing string) {
-	// convert because prometheus response can be float
-	w, _ := strconv.ParseFloat(warning, 64)
-	c, _ := strconv.ParseFloat(critical, 64)
+func analyze_response(response []byte, warning string, critical string, method string, label string, on_missing string, valueMapping map[string]string, value_unit string) {
+	var count_crit int
+	var count_warn int
+	var count_ok int
 
 	// convert []byte to json to access it more easily
 	json_resp := PrometheusStruct{}
@@ -182,14 +200,34 @@ func analyze_response(response []byte, warning string, critical string, method s
 	for _, result := range json_resp.Data.Result {
 		value := result.Value[1].(string)
 		metrics := result.Metric
-		if !set_status_message(c, "CRITICAL", metrics, value, method, label) {
-			set_status_message(w, "WARNING", metrics, value, method, label)
+		if set_status_message(critical, "CRITICAL", metrics, value, method, label, valueMapping, value_unit) {
+			count_crit++
+		} else if set_status_message(warning, "WARNING", metrics, value, method, label, valueMapping, value_unit) {
+			count_warn++
+		} else {
+			count_ok++
 		}
 	}
-	if NagiosMessage.critical == "" && NagiosMessage.warning == "" {
-		exit_func(NagiosStatus, "OK")
+
+	// it there's only one item in the result return one line, else return a summary and multilines
+	if count_crit+count_warn+count_ok > 1 {
+		switch NagiosStatus {
+		case 0:
+			NagiosMessage.summary = "OK "
+		case 1:
+			NagiosMessage.summary = "WARNING "
+		case 2:
+			NagiosMessage.summary = "CRITICAL "
+		default:
+			NagiosMessage.summary = "UNKNOWN "
+		}
+		if label == "none" {
+			label = "item"
+		}
+		NagiosMessage.summary = NagiosMessage.summary + strconv.Itoa(count_crit) + " " + label + " critical, " + strconv.Itoa(count_warn) + " " + label + " warning, " + strconv.Itoa(count_ok) + " " + label + " ok :\n------\n"
 	}
-	exit_func(NagiosStatus, NagiosMessage.critical+NagiosMessage.warning)
+	exit_func(NagiosStatus, strings.TrimSuffix(NagiosMessage.summary+NagiosMessage.critical+NagiosMessage.warning+NagiosMessage.ok, "\n"))
+
 }
 
 func exit_func(status int, message string) {
@@ -197,24 +235,43 @@ func exit_func(status int, message string) {
 	os.Exit(status)
 }
 
-func set_status_message(compare float64, mess string, metrics map[string]string, value string, method string, label string) bool {
-
+func set_status_message(compare string, mess string, metrics map[string]string, value string, method string, label string, valueMapping map[string]string, value_unit string) bool {
+	// convert because prometheus response can be float
+	float_compare, _ := strconv.ParseFloat(compare, 64)
 	float_value, _ := strconv.ParseFloat(value, 64)
-	c := Comparison{float_value, compare}                                  // structure with result value and comparison (w or c)
+
+	// if value mapping exist, replace it for output
+	mapped_value := valueMapping[value]
+	if len(mapped_value) > 0 {
+		value = mapped_value
+	}
+
+	// prepare label and its value for output
+	label_value := "value"
+	if len(metrics[label]) > 0 {
+		label_value = label + " " + metrics[label]
+	}
+	if len(value_unit) > 0 {
+		value = value + " " + value_unit
+	}
+	c := Comparison{float_value, float_compare}                            // structure with result value and comparison (w or c)
 	fn := reflect.ValueOf(&c).MethodByName(method).Call([]reflect.Value{}) // call the function with name method
 	if fn[0].Bool() {                                                      // get the result of the function called above
 		if mess == "CRITICAL" {
-			NagiosMessage.critical = NagiosMessage.critical + mess + " " + metrics[label] + " is " + value + " "
+			NagiosMessage.critical = NagiosMessage.critical + mess + " " + label_value + " is " + value + "\n"
 			if NagiosStatus == OK || NagiosStatus == WARNING {
 				NagiosStatus = CRITICAL
 			}
 		} else {
-			NagiosMessage.warning = NagiosMessage.warning + mess + " " + metrics[label] + " is " + value + " "
+			NagiosMessage.warning = NagiosMessage.warning + mess + " " + label_value + " is " + value + "\n"
 			if NagiosStatus == OK {
 				NagiosStatus = WARNING
 			}
 		}
 		return true
+	}
+	if mess == "WARNING" {
+		NagiosMessage.ok = NagiosMessage.ok + "OK" + " " + label_value + " is " + value + "\n"
 	}
 	return false
 }
@@ -222,6 +279,6 @@ func set_status_message(compare float64, mess string, metrics map[string]string,
 func Usage() {
 	fmt.Printf("How to: \n ")
 	fmt.Printf("$ go build nagitheus.go \n ")
-	fmt.Printf("$ ./nagitheus -H \"https://prometheus.example.com\" -q \"query\" -w 2  -c 3 -u User -p PASSWORD \n\n")
+	fmt.Printf("$ ./nagitheus -H \"https://prometheus.example.com\" -q \"query\" -w 2 -c 3 -u User -p PASSWORD \n\n")
 	flag.PrintDefaults()
 }

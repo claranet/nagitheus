@@ -77,6 +77,11 @@ exit status 2
       Password (Optional)
   --critical-on-missing
       Return CRITICAL if query results are missing (Optional) (default "no")
+  --value-mapping string
+    	Mapping result metrics for output (Optional, json i.e. '{"0":"down","1":"up"}')
+  --value-unit string
+    	Unit of the value for output (Optional, i.e. '%')
+  -v  Prints nagitheus version
 
 ```
 This software will perform a request on the prometheus server. Required flags are the Host, Query, Warning and Critical.
@@ -124,15 +129,24 @@ Prometheus response: {
   }
 }
 ```
+## Output
+If the result contains multiple values, the output returns a summary and multiline results.
+
 ## Label
 
 `-l labelname` takes a label that you want to print toghether with Status and value:
 ```
-WARNING prometheus-kube-prometheus-db-prometheus-kube-prometheus-0 is 2.2607424766047886 CRITICAL prometheus-kube-prometheus-db-prometheus-kube-prometheus-0 is 5.625835543270624
+CRITICAL 1 persistentvolumeclaim critical, 1 persistentvolumeclaim warning, 0 persistentvolumeclaim ok :
+------
+CRITICAL persistentvolumeclaim prometheus-kube-prometheus-db-prometheus-kube-prometheus-0 is 5.625835543270624
+WARNING persistentvolumeclaim prometheus-kube-prometheus-db-prometheus-kube-prometheus-0 is 2.2607424766047886
 ```
-Without the label the result would be
+Without the label the result would be:
 ```
-WARNING is 2.2607424766047886 CRITICAL is 5.625835543270624
+CRITICAL 1 item critical, 1 item warning, 0 item ok :
+------
+WARNING value is 2.2607424766047886
+CRITICAL value is 5.625835543270624
 ```
 
 ## Method
@@ -142,3 +156,22 @@ WARNING is 2.2607424766047886 CRITICAL is 5.625835543270624
 ## Basic auth
 `-u username -p password` when both are set the request will be performed with basic auth
 
+## Value Mapping
+`-value-mapping <json key-value pairs>` allow mapping of the result values to defined strings for output, e.g. 0=>DOWN, 1=> UP:
+```
+./nagitheus -H 'https://prometheus.mgt.domain.com' -q 'up{job="prometheus"}' -c 1 -w 1 -m lt -l job -value-mapping '{"0":"DOWN","1":"UP"}'
+```
+returns
+```
+OK job prometheus is UP
+```
+
+## Value Unit
+`-value-unit <unit>` allows adding a unit to the output result values, e.g. '%', 'GB':
+```
+WARNING persistentvolumeclaim prometheus-kube-prometheus-db-prometheus-kube-prometheus-0 is 2.2607424766047886 %
+CRITICAL persistentvolumeclaim prometheus-kube-prometheus-db-prometheus-kube-prometheus-0 is 5.625835543270624 %
+```
+
+## Version
+`-v` returns the version of nagitheus
