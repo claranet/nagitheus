@@ -39,7 +39,7 @@ const (
 	WARNING          = 1
 	CRITICAL         = 2
 	UNKNOWN          = 3
-	NagitheusVersion = "1.3.0"
+	NagitheusVersion = "1.4.0"
 )
 
 var NagiosMessage struct {
@@ -92,7 +92,9 @@ func main() {
 	password := flag.String("p", "", "Password (Optional)")
 	label := flag.String("l", "none", "Label to print (Optional)")
 	method := flag.String("m", "ge", "Comparison method (Optional)")
+	max_chars := flag.String("max-chars", "", "Max. count of characters to print")
 	debug := flag.String("d", "no", "Print prometheus result to output (Optional)")
+	detailed_print := flag.Bool("print-details", false, "Prints all returned values on multiline result")
 	on_missing := flag.String("critical-on-missing", "no", "Return CRITICAL if query results are missing (Optional)")
 	value_mapping := flag.String("value-mapping", "", "Mapping result metrics for output (Optional, json i.e. '{\"0\":\"down\",\"1\":\"up\"}')")
 	value_unit := flag.String("value-unit", "", "Unit of the value for output (Optional, i.e. '%')")
@@ -117,16 +119,16 @@ func main() {
 	if len(*value_mapping) > 0 {
 		json.Unmarshal([]byte(*value_mapping), &valueMapping)
 	}
-
 	// anaylze response
-	analyze_response(response, *warning, *critical, strings.ToUpper(*method), *label, *on_missing, valueMapping, *value_unit)
+	analyze_response(response, *warning, *critical, strings.ToUpper(*method), *label, *on_missing, *detailed_print, *max_chars, valueMapping, *value_unit)
 }
 
 func check_set(argument *flag.Flag) {
-	if argument.Value.String() == "" && argument.Name != "u" && argument.Name != "p" && argument.Name != "value-mapping" && argument.Name != "value-unit" {
+	if argument.Value.String() == "" && argument.Name != "u" && argument.Name != "p" &&
+		argument.Name != "value-mapping" && argument.Name != "value-unit" && argument.Name != "max-chars" {
 		Message := "Please set value for : " + argument.Name
 		Usage()
-		exit_func(UNKNOWN, Message)
+		exit_func(UNKNOWN, Message, 0)
 	}
 }
 
@@ -152,17 +154,17 @@ func execute_query(host string, query string, username string, password string) 
 		if resp != nil {
 			resp.Body.Close()
 		}
-		exit_func(UNKNOWN, err.Error())
+		exit_func(UNKNOWN, err.Error(), 0)
 	}
 	if resp.StatusCode != 200 {
 		resp.Body.Close()
-		exit_func(CRITICAL, resp.Status)
+		exit_func(CRITICAL, resp.Status, 0)
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		resp.Body.Close()
-		exit_func(UNKNOWN, err.Error())
+		exit_func(UNKNOWN, err.Error(), 0)
 	}
 	resp.Body.Close()
 	return (body)
@@ -178,23 +180,26 @@ func print_response(response []byte) {
 	fmt.Println("Prometheus response:", string(prometheus_response.Bytes()))
 }
 
-func analyze_response(response []byte, warning string, critical string, method string, label string, on_missing string, valueMapping map[string]string, value_unit string) {
+func analyze_response(response []byte, warning string, critical string, method string, label string,
+	on_missing string, detailed_print bool, max_chars string, valueMapping map[string]string, value_unit string) {
 	var count_crit int
 	var count_warn int
 	var count_ok int
+
+	max_chars_int, _ := strconv.ParseInt(max_chars, 10, 64)
 
 	// convert []byte to json to access it more easily
 	json_resp := PrometheusStruct{}
 	err := json.Unmarshal(response, &json_resp)
 	if err != nil {
-		exit_func(UNKNOWN, err.Error())
+		exit_func(UNKNOWN, err.Error(), 0)
 	}
 	result := json_resp.Data.Result
 	// Missing query result: for example when check is count or because query returns "no data"
 	if len(result) == 0 && on_missing == "no" {
-		exit_func(OK, "OK - The query did not return any result")
+		exit_func(OK, "OK - The query did not return any result", max_chars_int)
 	} else if len(result) == 0 && on_missing == "yes" {
-		exit_func(CRITICAL, "CRITICAL - The query did not return any result")
+		exit_func(CRITICAL, "CRITICAL - The query did not return any result", max_chars_int)
 	}
 
 	for _, result := range json_resp.Data.Result {
@@ -209,8 +214,9 @@ func analyze_response(response []byte, warning string, critical string, method s
 		}
 	}
 
-	// it there's only one item in the result return one line, else return a summary and multilines
-	if count_crit+count_warn+count_ok > 1 {
+	// if there's only one item in the result return one line
+	// else return a summary and multilines if detailed print is activated
+	if count_crit+count_warn+count_ok > 1 && detailed_print == true {
 		switch NagiosStatus {
 		case 0:
 			NagiosMessage.summary = "OK "
@@ -225,13 +231,19 @@ func analyze_response(response []byte, warning string, critical string, method s
 			label = "item"
 		}
 		NagiosMessage.summary = NagiosMessage.summary + strconv.Itoa(count_crit) + " " + label + " critical, " + strconv.Itoa(count_warn) + " " + label + " warning, " + strconv.Itoa(count_ok) + " " + label + " ok :\n------\n"
+	} else if count_crit+count_warn+count_ok > 1 && detailed_print == false {
+		exit_func(NagiosStatus, strings.ReplaceAll(NagiosMessage.critical+NagiosMessage.warning, "\n", " "), max_chars_int)
 	}
-	exit_func(NagiosStatus, strings.TrimSuffix(NagiosMessage.summary+NagiosMessage.critical+NagiosMessage.warning+NagiosMessage.ok, "\n"))
+	exit_func(NagiosStatus, strings.TrimSuffix(NagiosMessage.summary+NagiosMessage.critical+NagiosMessage.warning+NagiosMessage.ok, "\n"), max_chars_int)
 
 }
 
-func exit_func(status int, message string) {
-	fmt.Printf("%s \n", message)
+func exit_func(status int, message string, max_chars int64) {
+	if max_chars > 0 {
+		fmt.Printf("%s\n", message[:max_chars])
+	} else {
+		fmt.Printf("%s\n", message)
+	}
 	os.Exit(status)
 }
 
@@ -254,6 +266,7 @@ func set_status_message(compare string, mess string, metrics map[string]string, 
 	if len(value_unit) > 0 {
 		value = value + " " + value_unit
 	}
+
 	c := Comparison{float_value, float_compare}                            // structure with result value and comparison (w or c)
 	fn := reflect.ValueOf(&c).MethodByName(method).Call([]reflect.Value{}) // call the function with name method
 	if fn[0].Bool() {                                                      // get the result of the function called above
