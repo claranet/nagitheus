@@ -39,7 +39,7 @@ const (
 	WARNING          = 1
 	CRITICAL         = 2
 	UNKNOWN          = 3
-	NagitheusVersion = "1.4.2"
+	NagitheusVersion = "1.5.0"
 )
 
 var NagiosMessage struct {
@@ -90,7 +90,7 @@ func main() {
 	critical := flag.String("c", "", "Critical treshold (Required)")
 	username := flag.String("u", "", "Username (Optional)")
 	password := flag.String("p", "", "Password (Optional)")
-	token :=  flag.String("t", "", "Token (Optional)")
+	token := flag.String("t", "", "Token (Optional)")
 	label := flag.String("l", "none", "Label to print (Optional)")
 	method := flag.String("m", "ge", "Comparison method (Optional)")
 	max_chars := flag.String("max-chars", "", "Max. count of characters to print")
@@ -125,7 +125,7 @@ func main() {
 }
 
 func check_set(argument *flag.Flag) {
-	if argument.Value.String() == "" && argument.Name != "u" && argument.Name != "p" &&
+	if argument.Value.String() == "" && argument.Name != "u" && argument.Name != "p" && argument.Name != "t" &&
 		argument.Name != "value-mapping" && argument.Name != "value-unit" && argument.Name != "max-chars" {
 		Message := "Please set value for : " + argument.Name
 		Usage()
@@ -151,7 +151,7 @@ func execute_query(host string, query string, username string, password string, 
 		req.SetBasicAuth(username, password)
 	}
 	if token != "" {
-		req.Header.Add("Authorization", "Bearer " + token)
+		req.Header.Add("Authorization", "Bearer "+token)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
