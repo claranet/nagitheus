@@ -90,6 +90,7 @@ func main() {
 	critical := flag.String("c", "", "Critical treshold (Required)")
 	username := flag.String("u", "", "Username (Optional)")
 	password := flag.String("p", "", "Password (Optional)")
+	token :=  flag.String("t", "", "Token (Optional)")
 	label := flag.String("l", "none", "Label to print (Optional)")
 	method := flag.String("m", "ge", "Comparison method (Optional)")
 	max_chars := flag.String("max-chars", "", "Max. count of characters to print")
@@ -110,7 +111,7 @@ func main() {
 	// check flags
 	flag.VisitAll(check_set)
 	// query prometheus
-	response := execute_query(*host, *query, *username, *password)
+	response := execute_query(*host, *query, *username, *password, *token)
 	// print response (DEBUGGING)
 	if *debug == "yes" {
 		print_response(response)
@@ -132,7 +133,7 @@ func check_set(argument *flag.Flag) {
 	}
 }
 
-func execute_query(host string, query string, username string, password string) []byte {
+func execute_query(host string, query string, username string, password string, token string) []byte {
 	query_encoded := url.QueryEscape(query)
 	url_complete := host + "/api/v1/query?query=" + "(" + query_encoded + ")"
 
@@ -148,6 +149,9 @@ func execute_query(host string, query string, username string, password string) 
 	req, err := http.NewRequest("GET", url_complete, nil)
 	if username != "" && password != "" {
 		req.SetBasicAuth(username, password)
+	}
+	if token != "" {
+		req.Header.Add("Authorization", "Bearer " + token)
 	}
 	resp, err := client.Do(req)
 	if err != nil {

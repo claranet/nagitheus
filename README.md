@@ -75,6 +75,8 @@ exit status 2
       Username (Optional)
   -p string
       Password (Optional)
+  -t string
+      Token (Optional)
   --critical-on-missing
       Return CRITICAL if query results are missing (Optional) (default "no")
   --max-chars
@@ -159,6 +161,15 @@ CRITICAL value is 5.625835543270624
 
 ## Basic auth
 `-u username -p password` when both are set the request will be performed with basic auth
+
+## Token
+`-t token` the request will be performed adding the token to headers
+
+For example in Openshift you need to do
+```
+TOKEN=$(oc whoami -t)
+-t $TOKEN
+```
 
 ## Value Mapping
 `-value-mapping <json key-value pairs>` allow mapping of the result values to defined strings for output, e.g. 0=>DOWN, 1=> UP:
