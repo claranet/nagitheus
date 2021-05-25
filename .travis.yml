@@ -2,7 +2,7 @@ services:
 - docker
   
 go:
-- master
+- "1.12.x"
 
 jobs:
   include:
