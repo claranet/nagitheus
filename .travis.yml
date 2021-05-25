@@ -1,6 +1,8 @@
 services:
 - docker
   
+language: go
+
 go:
 - master
 
