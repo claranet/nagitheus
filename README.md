@@ -69,6 +69,8 @@ exit status 2
       Print whole prometheus result to output (Optional) (default "no")
   -l string
       Label to print (Optional) (default "none")
+  -f string
+      Format message with go template (Optional)
   -m string
       Comparison method (Optional) (default "ge")
   -u string
@@ -153,6 +155,26 @@ CRITICAL 1 item critical, 1 item warning, 0 item ok :
 ------
 WARNING value is 2.2607424766047886
 CRITICAL value is 5.625835543270624
+```
+
+## Format
+`-f formatstring` take a go template string to print status the way you want. Some variables are available for display.
+* `Label`
+* `Value`
+* `Metric` Map of metrics returned from prometheus that you can access with `{{.Metric.<metric_name>}}`
+
+Example:
+```
+-f '{{.Metric.node}}: {{.Metric.condition}} is {{.Value}}' --value-mapping '{"1":"KO","0":"OK"}'
+```
+Will output
+```
+WARNING 0 condition critical, 1 condition warning, 2 condition ok :
+------
+WARNING kube-node-1: FrequentContainerdRestart is KO
+OK kube-node-1: CorruptDockerOverlay2 is OK
+OK kube-node-2: CorruptDockerOverlay2 is OK
+OK kube-node-2: FrequentContainerdRestart is OK
 ```
 
 ## Method
