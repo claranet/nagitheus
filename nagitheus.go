@@ -40,7 +40,7 @@ const (
 	WARNING          = 1
 	CRITICAL         = 2
 	UNKNOWN          = 3
-	NagitheusVersion = "1.5.1"
+	NagitheusVersion = "1.6.0"
 )
 
 var NagiosMessage struct {
