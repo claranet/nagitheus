@@ -91,6 +91,8 @@ type TemplateData struct {
 }
 
 func main() {
+	start := time.Now()
+
 	host := flag.String("H", "", "Host to query (Required, i.e. https://example.prometheus.com)")
 	query := flag.String("q", "", "Prometheus query (Required)")
 	warning := flag.String("w", "", "Warning treshold (Required)")
@@ -119,7 +121,7 @@ func main() {
 	// check flags
 	flag.VisitAll(check_set)
 	// query prometheus
-	response := execute_query(*host, *query, *username, *password, *token)
+	response := execute_query(*host, *query, *username, *password, *token, start)
 	// print response (DEBUGGING)
 	if *debug == "yes" {
 		print_response(response)
@@ -134,22 +136,23 @@ func main() {
 	}
 	tmpl, err := template.New("format").Parse(*format)
 	if err != nil {
-		exit_func(UNKNOWN, err.Error(), 0)
+		exit_func(UNKNOWN, err.Error(), 0, start)
 	}
 	// anaylze response
-	analyze_response(response, *warning, *critical, strings.ToUpper(*method), *label, *on_missing, *detailed_print, *max_chars, valueMapping, *value_unit, tmpl)
+	analyze_response(response, *warning, *critical, strings.ToUpper(*method), *label, *on_missing, *detailed_print, *max_chars, valueMapping, *value_unit, tmpl, start)
 }
 
 func check_set(argument *flag.Flag) {
+	start := time.Now()
 	if argument.Value.String() == "" && argument.Name != "u" && argument.Name != "p" && argument.Name != "t" &&
 		argument.Name != "value-mapping" && argument.Name != "value-unit" && argument.Name != "max-chars" && argument.Name != "f" {
 		Message := "Please set value for : " + argument.Name
 		Usage()
-		exit_func(UNKNOWN, Message, 0)
+		exit_func(UNKNOWN, Message, 0, start)
 	}
 }
 
-func execute_query(host string, query string, username string, password string, token string) []byte {
+func execute_query(host string, query string, username string, password string, token string, start time.Time) []byte {
 	query_encoded := url.QueryEscape(query)
 	url_complete := host + "/api/v1/query?query=" + "(" + query_encoded + ")"
 
@@ -174,17 +177,17 @@ func execute_query(host string, query string, username string, password string, 
 		if resp != nil {
 			resp.Body.Close()
 		}
-		exit_func(UNKNOWN, err.Error(), 0)
+		exit_func(UNKNOWN, err.Error(), 0, start)
 	}
 	if resp.StatusCode != 200 {
 		resp.Body.Close()
-		exit_func(CRITICAL, resp.Status, 0)
+		exit_func(CRITICAL, resp.Status, 0, start)
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		resp.Body.Close()
-		exit_func(UNKNOWN, err.Error(), 0)
+		exit_func(UNKNOWN, err.Error(), 0, start)
 	}
 	resp.Body.Close()
 	return (body)
@@ -201,7 +204,7 @@ func print_response(response []byte) {
 }
 
 func analyze_response(response []byte, warning string, critical string, method string, label string,
-	on_missing string, detailed_print bool, max_chars string, valueMapping map[string]string, value_unit string, tmpl *template.Template) {
+	on_missing string, detailed_print bool, max_chars string, valueMapping map[string]string, value_unit string, tmpl *template.Template, start time.Time) {
 	var count_crit int
 	var count_warn int
 	var count_ok int
@@ -212,22 +215,22 @@ func analyze_response(response []byte, warning string, critical string, method s
 	json_resp := PrometheusStruct{}
 	err := json.Unmarshal(response, &json_resp)
 	if err != nil {
-		exit_func(UNKNOWN, err.Error(), 0)
+		exit_func(UNKNOWN, err.Error(), 0, start)
 	}
 	result := json_resp.Data.Result
 	// Missing query result: for example when check is count or because query returns "no data"
 	if len(result) == 0 && on_missing == "no" {
-		exit_func(OK, "OK - The query did not return any result", max_chars_int)
+		exit_func(OK, "OK - The query did not return any result", max_chars_int, start)
 	} else if len(result) == 0 && on_missing == "yes" {
-		exit_func(CRITICAL, "CRITICAL - The query did not return any result", max_chars_int)
+		exit_func(CRITICAL, "CRITICAL - The query did not return any result", max_chars_int, start)
 	}
 
 	for _, result := range json_resp.Data.Result {
 		value := result.Value[1].(string)
 		metrics := result.Metric
-		if set_status_message(critical, "CRITICAL", metrics, value, method, label, valueMapping, value_unit, tmpl) {
+		if set_status_message(critical, "CRITICAL", metrics, value, method, label, valueMapping, value_unit, tmpl, start) {
 			count_crit++
-		} else if set_status_message(warning, "WARNING", metrics, value, method, label, valueMapping, value_unit, tmpl) {
+		} else if set_status_message(warning, "WARNING", metrics, value, method, label, valueMapping, value_unit, tmpl, start) {
 			count_warn++
 		} else {
 			count_ok++
@@ -257,24 +260,24 @@ func analyze_response(response []byte, warning string, critical string, method s
 		}
 		NagiosMessage.summary = NagiosMessage.summary + strconv.Itoa(count_crit) + " " + label + " critical, " + strconv.Itoa(count_warn) + " " + label + " warning, " + strconv.Itoa(count_ok) + " " + label + " ok :\n------\n"
 	} else if count_crit+count_warn > 1 && detailed_print == false {
-		exit_func(NagiosStatus, strings.ReplaceAll(NagiosMessage.critical+NagiosMessage.warning, "\n", " "), max_chars_int)
+		exit_func(NagiosStatus, strings.ReplaceAll(NagiosMessage.critical+NagiosMessage.warning, "\n", " "), max_chars_int, start)
 	} else if count_crit+count_warn == 0 && count_ok > 1 && detailed_print == false {
-		exit_func(NagiosStatus, "OK", max_chars_int)
+		exit_func(NagiosStatus, "OK", max_chars_int, start)
 	}
-	exit_func(NagiosStatus, strings.TrimSuffix(NagiosMessage.summary+NagiosMessage.critical+NagiosMessage.warning+NagiosMessage.ok, "\n"), max_chars_int)
+	exit_func(NagiosStatus, strings.TrimSuffix(NagiosMessage.summary+NagiosMessage.critical+NagiosMessage.warning+NagiosMessage.ok, "\n"), max_chars_int, start)
 
 }
 
-func exit_func(status int, message string, max_chars int64) {
+func exit_func(status int, message string, max_chars int64, start time.Time) {
 	if max_chars > 0 && int64(len(message)) > max_chars {
 		fmt.Printf("%s\n", message[:max_chars])
 	} else {
-		fmt.Printf("%s\n", message)
+		fmt.Printf("%s | time: %s\n", message, time.Since(start))
 	}
 	os.Exit(status)
 }
 
-func set_status_message(compare string, mess string, metrics map[string]string, value string, method string, label string, valueMapping map[string]string, value_unit string, tmpl *template.Template) bool {
+func set_status_message(compare string, mess string, metrics map[string]string, value string, method string, label string, valueMapping map[string]string, value_unit string, tmpl *template.Template, start time.Time) bool {
 	// convert because prometheus response can be float
 	float_compare, _ := strconv.ParseFloat(compare, 64)
 	float_value, _ := strconv.ParseFloat(value, 64)
@@ -298,7 +301,7 @@ func set_status_message(compare string, mess string, metrics map[string]string, 
 	var tmpl_msg bytes.Buffer
 	err := tmpl.Execute(&tmpl_msg, tmpl_data)
 	if err != nil {
-		exit_func(UNKNOWN, err.Error(), 0)
+		exit_func(UNKNOWN, err.Error(), 0, start)
 	}
 
 	c := Comparison{float_value, float_compare}                            // structure with result value and comparison (w or c)
