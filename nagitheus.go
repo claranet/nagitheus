@@ -135,7 +135,7 @@ func main() {
 
 	if len(*format) == 0 {
 		if *perf_data {
-			*format = "{{.Label}} is {{.Value}} | query_result={{.Value}};0:{{.Warning}};0:{{.Critical}};U;U"
+			*format = "{{.Label}} is {{.Value}} | query_result={{.Value}};0:{{.Warning}};0:{{.Critical}}"
 		} else {
 			*format = "{{.Label}} is {{.Value}}"
 		}
