@@ -85,6 +85,8 @@ exit status 2
       Max. count of characters to print
   --print-details
       Prints all returned values on multiline result
+  --print-perf-data
+	    Prints performance data for results in the format `query_result=<result>;<warning>;<critical>`
   --value-mapping string
     	Mapping result metrics for output (Optional, json i.e. '{"0":"down","1":"up"}')
   --value-unit string
