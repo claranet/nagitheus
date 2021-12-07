@@ -85,12 +85,15 @@ type PrometheusStruct struct {
 }
 
 type TemplateData struct {
-	Label  string
-	Value  string
-	Metric map[string]string
+	Label    string
+	Value    string
+	Metric   map[string]string
+	Warning  string
+	Critical string
 }
 
 func main() {
+
 	host := flag.String("H", "", "Host to query (Required, i.e. https://example.prometheus.com)")
 	query := flag.String("q", "", "Prometheus query (Required)")
 	warning := flag.String("w", "", "Warning treshold (Required)")
@@ -104,6 +107,7 @@ func main() {
 	max_chars := flag.String("max-chars", "", "Max. count of characters to print")
 	debug := flag.String("d", "no", "Print prometheus result to output (Optional)")
 	detailed_print := flag.Bool("print-details", false, "Prints all returned values on multiline result")
+	perf_data := flag.Bool("print-perf-data", false, "Prints performance data for results")
 	on_missing := flag.String("critical-on-missing", "no", "Return CRITICAL if query results are missing (Optional)")
 	value_mapping := flag.String("value-mapping", "", "Mapping result metrics for output (Optional, json i.e. '{\"0\":\"down\",\"1\":\"up\"}')")
 	value_unit := flag.String("value-unit", "", "Unit of the value for output (Optional, i.e. '%')")
@@ -130,7 +134,11 @@ func main() {
 	}
 
 	if len(*format) == 0 {
-		*format = "{{.Label}} is {{.Value}}"
+		if *perf_data {
+			*format = "{{.Label}} is {{.Value}} | query_result={{.Value}};{{.Warning}};{{.Critical}}"
+		} else {
+			*format = "{{.Label}} is {{.Value}}"
+		}
 	}
 	tmpl, err := template.New("format").Parse(*format)
 	if err != nil {
@@ -225,9 +233,9 @@ func analyze_response(response []byte, warning string, critical string, method s
 	for _, result := range json_resp.Data.Result {
 		value := result.Value[1].(string)
 		metrics := result.Metric
-		if set_status_message(critical, "CRITICAL", metrics, value, method, label, valueMapping, value_unit, tmpl) {
+		if set_status_message(critical, "CRITICAL", metrics, value, method, label, valueMapping, value_unit, tmpl, warning, critical) {
 			count_crit++
-		} else if set_status_message(warning, "WARNING", metrics, value, method, label, valueMapping, value_unit, tmpl) {
+		} else if set_status_message(warning, "WARNING", metrics, value, method, label, valueMapping, value_unit, tmpl, warning, critical) {
 			count_warn++
 		} else {
 			count_ok++
@@ -274,7 +282,7 @@ func exit_func(status int, message string, max_chars int64) {
 	os.Exit(status)
 }
 
-func set_status_message(compare string, mess string, metrics map[string]string, value string, method string, label string, valueMapping map[string]string, value_unit string, tmpl *template.Template) bool {
+func set_status_message(compare string, mess string, metrics map[string]string, value string, method string, label string, valueMapping map[string]string, value_unit string, tmpl *template.Template, warning string, critical string) bool {
 	// convert because prometheus response can be float
 	float_compare, _ := strconv.ParseFloat(compare, 64)
 	float_value, _ := strconv.ParseFloat(value, 64)
@@ -294,7 +302,7 @@ func set_status_message(compare string, mess string, metrics map[string]string, 
 		value = value + " " + value_unit
 	}
 
-	tmpl_data := TemplateData{label_value, value, metrics}
+	tmpl_data := TemplateData{label_value, value, metrics, warning, critical}
 	var tmpl_msg bytes.Buffer
 	err := tmpl.Execute(&tmpl_msg, tmpl_data)
 	if err != nil {
