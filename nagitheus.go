@@ -68,6 +68,12 @@ func (c *Comparison) GE() bool {
 func (c *Comparison) LE() bool {
 	return c.x <= c.y
 }
+func (c *Comparison) EQ() bool {
+	return c.x == c.y
+}
+func (c *Comparison) NQ() bool {
+	return c.x != c.y
+}
 
 var valueMapping map[string]string
 
@@ -282,6 +288,15 @@ func exit_func(status int, message string, max_chars int64) {
 	os.Exit(status)
 }
 
+func contains(elems []string, v string) bool {
+	for _, s := range elems {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
 func set_status_message(compare string, mess string, metrics map[string]string, value string, method string, label string, valueMapping map[string]string, value_unit string, tmpl *template.Template, warning string, critical string) bool {
 	// convert because prometheus response can be float
 	float_compare, _ := strconv.ParseFloat(compare, 64)
@@ -309,7 +324,17 @@ func set_status_message(compare string, mess string, metrics map[string]string, 
 		exit_func(UNKNOWN, err.Error(), 0)
 	}
 
-	c := Comparison{float_value, float_compare}                            // structure with result value and comparison (w or c)
+	c := Comparison{float_value, float_compare} // structure with result value and comparison (w or c)
+	// check if valid method is given
+	var methods []string
+	t := reflect.TypeOf(&c)
+	for i := 0; i < t.NumMethod(); i++ {
+		methods = append(methods, t.Method(i).Name)
+	}
+	if contains(methods, method) == false {
+		exit_func(UNKNOWN, "Unknown method provided", 0)
+	}
+
 	fn := reflect.ValueOf(&c).MethodByName(method).Call([]reflect.Value{}) // call the function with name method
 	if fn[0].Bool() {                                                      // get the result of the function called above
 		if mess == "CRITICAL" {
